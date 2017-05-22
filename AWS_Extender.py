@@ -30,7 +30,7 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
     def registerExtenderCallbacks(self, callbacks):
         """Register extender callbacks."""
         self.callbacks = callbacks
-        self.EXT_NAME = "AWS Extender"
+        self.EXT_NAME = 'AWS Extender'
 
         # Set the name of the extension
         self.callbacks.setExtensionName(self.EXT_NAME)
@@ -54,21 +54,21 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         self.access_key_inpt = JTextField(10)
         self.secret_key_inpt = JTextField(10)
         self.session_token_inpt = JTextField(10)
-        save_btn = JButton("Save", actionPerformed=self.save_config)
+        save_btn = JButton('Save', actionPerformed=self.save_config)
 
         labels = JPanel(GridLayout(0, 1))
         inputs = JPanel(GridLayout(0, 1))
         creds_panel.add(labels, BorderLayout.WEST)
         creds_panel.add(inputs, BorderLayout.CENTER)
 
-        top_label = JLabel("<html><b>AWS Credentials</b><br><br></html>")
+        top_label = JLabel('<html><b>AWS Credentials</b><br><br></html>')
         top_label.setHorizontalAlignment(JLabel.CENTER)
         creds_panel.add(top_label, BorderLayout.NORTH)
-        labels.add(JLabel("Access Key: "))
+        labels.add(JLabel('Access Key: '))
         inputs.add(self.access_key_inpt)
-        labels.add(JLabel("Secret Key: "))
+        labels.add(JLabel('Secret Key: '))
         inputs.add(self.secret_key_inpt)
-        labels.add(JLabel("Session Key (optional): "))
+        labels.add(JLabel('Session Key (optional): '))
         inputs.add(self.session_token_inpt)
         creds_panel.add(save_btn, BorderLayout.SOUTH)
         return creds_panel
@@ -85,9 +85,9 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
     def reload_config(self):
         """Reload saved settings."""
         load_setting = self.callbacks.loadExtensionSetting
-        access_key_val = load_setting("access_key")
-        secret_key_val = load_setting("secret_key")
-        session_token_val = load_setting("session_token")
+        access_key_val = load_setting('access_key')
+        secret_key_val = load_setting('secret_key')
+        session_token_val = load_setting('session_token')
         self.aws_access_key = access_key_val
         self.aws_secret_key = secret_key_val
         self.aws_session_token = session_token_val
@@ -97,7 +97,7 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         return
 
     def getTabCaption(self):
-        """Return Tab Caption."""
+        """Return tab caption."""
         return self.EXT_NAME
 
     def getUiComponent(self):
@@ -457,17 +457,17 @@ class BucketScan(object):
             issuelevel = 'Low'
 
         if untested:
-            print """Untested permissions:\n[*] %s""" % '\n[*] '.join(untested)
+            print '''Untested permissions:\n[*] %s''' % '\n[*] '.join(untested)
 
-        issuename = "S3 Bucket Misconfiguration"
-        issuedetail = """The "$bucket_name$" S3 bucket grants the following permissions:
-                         <br><li>%s</li><br><br>""" % ('</li><li>'.join(issues))
+        issuename = 'S3 Bucket Misconfiguration'
+        issuedetail = '''The "$bucket_name$" S3 bucket grants the following permissions:
+                         <br><li>%s</li><br><br>''' % ('</li><li>'.join(issues))
 
         self.scan_issues.append(
             ScanIssue(self.request_response.getHttpService(),
                       self.helpers.analyzeRequest(self.request_response).getUrl(),
                       markers, issuename, issuelevel,
-                      issuedetail.replace("$bucket_name$", bucket_name)
+                      issuedetail.replace('$bucket_name$', bucket_name)
                      )
         )
 
@@ -520,13 +520,13 @@ class BucketScan(object):
                 markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
             else:
                 markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
-            issuename = "S3 Bucket Detected"
-            issuelevel = "Information"
+            issuename = 'S3 Bucket Detected'
+            issuelevel = 'Information'
             issuedetail = 'The following S3 bucket has been identified:<br><li>$bucket_name$</li>'
             self.scan_issues.append(
                 ScanIssue(self.request_response.getHttpService(),
                           current_url, markers, issuename, issuelevel,
-                          issuedetail.replace("$bucket_name$", bucket_name)
+                          issuedetail.replace('$bucket_name$', bucket_name)
                          )
             )
 
@@ -580,4 +580,4 @@ class ScanIssue(IScanIssue):
 
     @staticmethod
     def getConfidence():
-        return "Certain"
+        return 'Certain'
