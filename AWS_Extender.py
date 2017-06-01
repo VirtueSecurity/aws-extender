@@ -26,6 +26,7 @@ from org.xml.sax import SAXException
 identified_buckets = set()
 tested_uris = set()
 
+
 class BurpExtender(IBurpExtender, IScannerCheck, ITab):
     def registerExtenderCallbacks(self, callbacks):
         """Register extender callbacks."""
@@ -473,6 +474,7 @@ class BucketScan(object):
 
     def identify_buckets(self):
         """Identify S3 buckets."""
+        host = ''
         bucket_names = []
         offsets = []
         markers = []
