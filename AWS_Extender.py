@@ -33,10 +33,10 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
     def registerExtenderCallbacks(self, callbacks):
         """Register extender callbacks."""
         self.callbacks = callbacks
-        self.EXT_NAME = 'AWS Extender'
+        self.ext_name = 'AWS Extender'
 
         # Set the name of the extension
-        self.callbacks.setExtensionName(self.EXT_NAME)
+        self.callbacks.setExtensionName(self.ext_name)
 
         # Register the extension as a scanner check
         self.callbacks.registerScannerCheck(self)
@@ -74,7 +74,7 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         except SAXException:
             missing_libs.append('SAXParser')
             tips.append("""Run Burp Suite using the following command:
-               <br><code style='background:#f7f7f9;color:red'>$ java -classpath 
+               <br><code style='background: #f7f7f9; color: red'>$ java -classpath 
                xercesImpl.jar;burpsuite_pro.jar burp.StartBurp</code>""")
 
         if not missing_libs:
@@ -83,7 +83,7 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         label %= ('</li><li>'.join(missing_libs), '</li><li>'.join(tips))
         top_label = JLabel(label, JLabel.CENTER)
 
-        frame = JFrame(self.EXT_NAME)
+        frame = JFrame(self.ext_name)
         frame.setSize(550, 300)
         frame.setLayout(GridLayout(1, 1))
 
@@ -143,7 +143,7 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
 
     def getTabCaption(self):
         """Return tab caption."""
-        return self.EXT_NAME
+        return self.ext_name
 
     def getUiComponent(self):
         """Return GUI elements."""
