@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import re
 import traceback
+import xml.etree.ElementTree as ET
 from array import array
 from datetime import datetime
 try:
@@ -16,6 +17,7 @@ from burp import IScannerCheck
 from burp import ITab
 from javax.swing import JTextField
 from javax.swing import JLabel
+from javax.swing import JFrame
 from javax.swing import JPanel
 from javax.swing import JButton
 from javax.swing.border import EmptyBorder
@@ -45,7 +47,49 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         callbacks.customizeUiComponent(self.gui_elements)
         callbacks.addSuiteTab(self)
         self.reload_config()
+        self.show_errors()
         return
+
+    def show_errors(self):
+        """Display loading errors."""
+        missing_libs = []
+        tips = []
+        label = """<html>
+              <body style='margin: 10px'>
+                <b>The following dependencies could not be loaded successfully:</b><br>
+                <ul><li>%s</li></ul><br>
+                <b>Tips:</b><br>
+                <ul><li>%s</li><br></ul>
+                <b>For detailed information on how to load the plugin, see:</b><br>
+                <ul><li><a href='#'>How to Load AWS Extender</a></li></ul>
+              </body>
+            </html>"""
+
+        if not RUN_TESTS:
+            missing_libs.append('boto3')
+            tips.append('Make sure that the boto3 library is installed properly, and\
+                the right path is specified in the "Folder for loading modules" setting.')
+        try:
+            ET.fromstring('<test></test>')
+        except SAXException:
+            missing_libs.append('SAXParser')
+            tips.append("""Run Burp Suite using the following command:
+               <br><code style='background:#f7f7f9;color:red'>$ java -classpath 
+               xercesImpl.jar;burpsuite_pro.jar burp.StartBurp</code>""")
+
+        if not missing_libs:
+            return
+
+        label %= ('</li><li>'.join(missing_libs), '</li><li>'.join(tips))
+        top_label = JLabel(label, JLabel.CENTER)
+
+        frame = JFrame(self.EXT_NAME)
+        frame.setSize(550, 300)
+        frame.setLayout(GridLayout(1, 1))
+
+        frame.add(top_label)
+        frame.setLocationRelativeTo(None)
+        frame.setVisible(True)
 
     def build_gui(self):
         """Construct GUI elements."""
