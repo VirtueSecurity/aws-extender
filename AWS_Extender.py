@@ -546,7 +546,7 @@ class BucketScan(object):
 
         # Matches S3 bucket names within "amazonaws.com" URIs
         bucket_name_regex = re.compile(
-            r'(?:([\w.-]+)\.s3[\w.-]*\.amazonaws\.com|s3[\w.-]*\.amazonaws\.com/([\w.-]+))',
+            r'(?:([\w.-]+)\.s3[\w.-]*\.amazonaws\.com|s3[\w.-]*\.amazonaws\.com(?:\\?/)*([\w.-]+))',
             re.I)
         bucket_names += re.findall(bucket_name_regex, response_str)
         for i in xrange(0, len(bucket_names)):
