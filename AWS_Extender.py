@@ -162,6 +162,9 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
             return scan_issues
         return None
 
+    @staticmethod
+    def doActiveScan(*args):
+        pass
 
     @staticmethod
     def consolidateDuplicateIssues(existing_issue, new_issue):
