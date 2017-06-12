@@ -298,6 +298,9 @@ class BucketScan(object):
             try:
                 self.client.head_bucket(Bucket=bucket_name)
                 issues.append('READ')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (head_bucket): ' + error_code
             except SAXException:
                 untested.append('s3:ListBucket')
 
