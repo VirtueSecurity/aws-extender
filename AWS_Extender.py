@@ -498,6 +498,10 @@ class BucketScan(object):
         except SAXException:
             untested.append('s3:PutObject')
 
+        if untested:
+            print 'Bucket: ' + bucket_name
+            print '''Untested permissions:\n[*] %s''' % '\n[*] '.join(untested)
+
         if not issues:
             return
         if 'put_bucket_acl' in issues or len(issues) > 5:
@@ -506,9 +510,6 @@ class BucketScan(object):
             issuelevel = 'Medium'
         else:
             issuelevel = 'Low'
-
-        if untested:
-            print '''Untested permissions:\n[*] %s''' % '\n[*] '.join(untested)
 
         issuename = 'S3 Bucket Misconfiguration'
         issuedetail = '''The "$bucket_name$" S3 bucket grants the following permissions:
