@@ -526,7 +526,6 @@ class BucketScan(object):
         """Identify S3 buckets."""
         host = ''
         bucket_names = []
-        offsets = []
         markers = []
         mark_request = False
         offset = array('i', [0, 0])
@@ -550,6 +549,7 @@ class BucketScan(object):
             re.I)
         bucket_names += re.findall(bucket_name_regex, response_str)
         for i in xrange(0, len(bucket_names)):
+            offsets = []
             bucket_name = bucket_names[i]
             bucket_name = bucket_name[0] or bucket_name[1]
             if bucket_name in identified_buckets and current_url_str in tested_uris:
