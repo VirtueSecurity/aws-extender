@@ -535,8 +535,8 @@ class BucketScan(object):
         request_str = self.helpers.bytesToString(request)
         request_len = len(request_str)
         response_str = self.helpers.bytesToString(response)
-        response_str = response_str.encode('utf8', 'ignore')
         response_len = len(response_str)
+        response_str = response_str.encode('utf-8', 'replace')
         current_url = self.helpers.analyzeRequest(self.request_response).getUrl()
         current_url_str = re.search(r'\w+://[^/]+', str(current_url)).group(0)
 
