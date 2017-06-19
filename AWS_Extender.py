@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import re
 import traceback
-import xml.etree.ElementTree as ET
+import xml.etree.cElementTree as CET
 from array import array
 from datetime import datetime
 try:
@@ -24,6 +24,8 @@ from javax.swing.border import EmptyBorder
 from java.awt import BorderLayout
 from java.awt import GridLayout
 from org.xml.sax import SAXException
+from botocore.compat import XMLParseError
+from botocore.parsers import ResponseParserError
 
 identified_buckets = set()
 tested_uris = set()
@@ -70,12 +72,23 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
             tips.append('Make sure that the boto3 library is installed properly, and\
                 the right path is specified in the "Folder for loading modules" setting.')
         try:
-            ET.fromstring('<test></test>')
+            CET.fromstring('<test></test>')
         except SAXException:
-            missing_libs.append('SAXParser')
-            tips.append("""Run Burp Suite using the following command:
-               <br><code style='background: #f7f7f9; color: red'>$ java -classpath 
-               xercesImpl.jar;burpsuite_pro.jar burp.StartBurp</code>""")
+            # Try to workaround "http://bugs.jython.org/issue1127"
+            try:
+                def dummy(target='', encoding=''):
+                    class foo(object):
+                        def feed(*args):
+                            raise XMLParseError
+                        def close(*args):
+                            return None
+                    return foo()
+                CET.XMLParser = dummy
+            except RuntimeError:
+                missing_libs.append('SAXParser')
+                tips.append("""Run Burp Suite using the following command:
+                   <br><code style='background: #f7f7f9; color: red'>$ java -classpath 
+                   xercesImpl.jar;burpsuite_pro.jar burp.StartBurp</code>""")
 
         if not missing_libs:
             return
@@ -218,11 +231,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (get_bucket_acl): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:GetBucketAcl')
-        except:
-            trace = traceback.format_exc()
-            #print trace
+        except ResponseParserError:
+            issues.append('s3:GetBucketAcl')
 
         try:
             bucket_cors = self.client.get_bucket_cors(Bucket=bucket_name)
@@ -230,8 +240,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (get_bucket_cors): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:GetBucketCORS')
+        except ResponseParserError:
+            issues.append('s3:GetBucketCORS')
 
         try:
             bucket_lifecycle = self.client.get_bucket_lifecycle(Bucket=bucket_name)
@@ -239,8 +249,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (get_bucket_lifecycle): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:GetLifecycleConfiguration')
+        except ResponseParserError:
+            issues.append('s3:GetLifecycleConfiguration')
 
         try:
             bucket_notification = self.client.get_bucket_notification(Bucket=bucket_name)
@@ -248,8 +258,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (get_bucket_notification): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:GetBucketNotification')
+        except ResponseParserError:
+            issues.append('s3:GetBucketNotification')
 
         try:
             bucket_policy = self.client.get_bucket_policy(Bucket=bucket_name)
@@ -257,8 +267,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (get_bucket_policy): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:GetBucketPolicy')
+        except ResponseParserError:
+            issues.append('s3:GetBucketPolicy')
 
         try:
             bucket_tagging = self.client.get_bucket_tagging(Bucket=bucket_name)
@@ -267,8 +277,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (get_bucket_tagging): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:GetBucketTagging')
+        except ResponseParserError:
+            issues.append('s3:GetBucketTagging')
 
         try:
             bucket_website = self.client.get_bucket_website(Bucket=bucket_name)
@@ -276,8 +286,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (get_bucket_website): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:GetBucketWebsite')
+        except ResponseParserError:
+            issues.append('s3:GetBucketWebsite')
 
         try:
             multipart_uploads = self.client.list_multipart_uploads(Bucket=bucket_name)
@@ -285,8 +295,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (list_multipart_uploads): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:ListMultipartUploadParts')
+        except ResponseParserError:
+            issues.append('s3:ListMultipartUploadParts')
 
         try:
             objects = self.client.list_objects(Bucket=bucket_name)
@@ -294,15 +304,15 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (list_objects): ' + str(error_code)
-        except SAXException:
+        except ResponseParserError:
             try:
                 self.client.head_bucket(Bucket=bucket_name)
                 issues.append('READ')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
                 print 'Error Code (head_bucket): ' + error_code
-            except SAXException:
-                untested.append('s3:ListBucket')
+            except ResponseParserError:
+                issues.append('s3:ListBucket')
 
         try:
             put_acl = self.client.put_bucket_acl(
@@ -313,8 +323,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (put_bucket_acl): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:PutBucketAcl')
+        except ResponseParserError:
+            issues.append('s3:PutBucketAcl')
 
         try:
             put_cors = self.client.put_bucket_cors(
@@ -340,8 +350,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (put_bucket_cors): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:PutBucketCORS')
+        except ResponseParserError:
+            issues.append('s3:PutBucketCORS')
 
         try:
             put_lifecycle_configuration = self.client.put_bucket_lifecycle_configuration(
@@ -381,8 +391,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (put_bucket_lifecycle_configuration): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:PutLifecycleConfiguration')
+        except ResponseParserError:
+            issues.append('s3:PutLifecycleConfiguration')
 
         try:
             put_logging = self.client.put_bucket_logging(
@@ -393,8 +403,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (put_bucket_logging): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:PutBucketLogging')
+        except ResponseParserError:
+            issues.append('s3:PutBucketLogging')
 
         try:
             put_notification = self.client.put_bucket_notification(
@@ -416,8 +426,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (put_bucket_notification): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:PutBucketNotification')
+        except ResponseParserError:
+            issues.append('s3:PutBucketNotification')
 
         try:
             put_policy = self.client.put_bucket_policy(
@@ -443,8 +453,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (put_bucket_policy): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:PutBucketPolicy')
+        except ResponseParserError:
+            issues.append('s3:PutBucketPolicy')
 
         try:
             put_tagging = self.client.put_bucket_tagging(
@@ -462,8 +472,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (put_bucket_tagging): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:PutBucketTagging')
+        except ResponseParserError:
+            issues.append('s3:PutBucketTagging')
 
         try:
             put_website = self.client.put_bucket_website(
@@ -481,8 +491,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (put_bucket_website): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:PutBucketWebsite')
+        except ResponseParserError:
+            issues.append('s3:PutBucketWebsite')
 
         try:
             put_object = self.client.put_object(
@@ -495,8 +505,8 @@ class BucketScan(object):
         except ClientError as error:
             error_code = error.response['Error']['Code']
             print 'Error Code (put_object): ' + str(error_code)
-        except SAXException:
-            untested.append('s3:PutObject')
+        except ResponseParserError:
+            issues.append('s3:PutObject')
 
         if untested:
             print 'Bucket: ' + bucket_name
