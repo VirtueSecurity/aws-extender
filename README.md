@@ -52,3 +52,5 @@ After obtaining your AWS credentials, you will need to add them through the "AWS
 ## Todo
 * Cover more AWS services.
 * Add more tests.
+* Show tests output.
+* Add an import option for bucket names.
