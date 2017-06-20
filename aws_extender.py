@@ -421,10 +421,8 @@ class BucketScan(object):
                         'Id': 'string',
                         'Events': [
                             's3:ReducedRedundancyLostObject',
-
                         ],
                         'Event': 's3:ReducedRedundancyLostObject',
-
                         'Topic': 'test'
                     }
                 }
