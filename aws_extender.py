@@ -9,6 +9,8 @@ try:
     import boto3
     from botocore.exceptions import ClientError
     from botocore.handlers import disable_signing
+    from botocore.compat import XMLParseError
+    from botocore.parsers import ResponseParserError
     RUN_TESTS = True
 except ImportError:
     RUN_TESTS = False
@@ -25,8 +27,6 @@ from javax.swing.border import EmptyBorder
 from java.awt import BorderLayout
 from java.awt import GridLayout
 from org.xml.sax import SAXException
-from botocore.compat import XMLParseError
-from botocore.parsers import ResponseParserError
 
 identified_buckets = set()
 tested_uris = set()
@@ -74,7 +74,11 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
                 <b>Tips:</b><br>
                 <ul><li>%s</li><br></ul>
                 <b>For detailed information on how to load the plugin, see:</b><br>
-                <ul><li><a href='#'>How to Load AWS Extender</a></li></ul>
+                <ul>
+                  <li>
+                    <a href='#'>https://github.com/VirtueSecurity/aws-extender#getting-started</a>
+                  </li>
+                </ul>
               </body>
             </html>"""
 
