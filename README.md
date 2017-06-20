@@ -19,7 +19,7 @@ AWS Extender is a [Burpsuite](https://portswigger.net/burp/) plugin to identify 
 In order to make full use of AWS Extender, you will need an AWS access key as well as a secret key. if you don't have an account, one can be obtained for free at "[https://aws.amazon.com/free/](https://aws.amazon.com/free/)".
 
 After obtaining your AWS credentials, you will need to add them through the "AWS Extender" tab as shown below:
-<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/config-tab.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/config-tab-thumb.png?raw=true"></a>
+<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/config-tab.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/config-tab-thumb.png?raw=true" alt="Congig Tab"></a>
 
 ## Tests Covered
 
@@ -45,8 +45,9 @@ After obtaining your AWS credentials, you will need to add them through the "AWS
  - Set Bucket Logging (s3:PutBucketLogging)
 
 ## Screenshots
-<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket_identified.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket_identified.png?raw=true"></a>
-<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket-readable.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket-readable.png?raw=true"></a>
+<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket_identified.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket_identified.png?raw=true" alt="Bucket Identified"></a>
+
+<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket-readable.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket-readable.png?raw=true" alt="Bucket Readable"></a>
 
 ## Todo
 * Cover more AWS services.
