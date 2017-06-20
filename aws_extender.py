@@ -237,7 +237,6 @@ class BucketScan(object):
         read_acp = False
         write_acp = False
         issues = []
-        untested = []
 
         try:
             policy = self.client.get_bucket_acl(Bucket=bucket_name)
@@ -512,10 +511,6 @@ class BucketScan(object):
             print 'Error Code (put_object): ' + str(error_code)
         except ResponseParserError:
             issues.append('s3:PutObject')
-
-        if untested:
-            print 'Bucket: ' + bucket_name
-            print '''Untested permissions:\n[*] %s''' % '\n[*] '.join(untested)
 
         if not issues:
             return
