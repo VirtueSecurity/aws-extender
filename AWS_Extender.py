@@ -32,10 +32,20 @@ tested_uris = set()
 
 
 class BurpExtender(IBurpExtender, IScannerCheck, ITab):
+    def __init__(self):
+        self.ext_name = 'AWS Extender'
+        self.callbacks = None
+        self.gui_elements = None
+        self.access_key_inpt = None
+        self.secret_key_inpt = None
+        self.session_token_inpt = None
+        self.aws_access_key = ''
+        self.aws_secret_key = ''
+        self.aws_session_token = ''
+
     def registerExtenderCallbacks(self, callbacks):
         """Register extender callbacks."""
         self.callbacks = callbacks
-        self.ext_name = 'AWS Extender'
 
         # Set the name of the extension
         self.callbacks.setExtensionName(self.ext_name)
@@ -76,15 +86,15 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         except SAXException:
             # Try to workaround "http://bugs.jython.org/issue1127"
             try:
-                def dummy(target='', encoding=''):
-                    class foo(object):
+                def xml_parser(**kwargs):
+                    class Parser(object):
                         def feed(*args):
                             raise XMLParseError
                         def close(*args):
                             return None
-                    return foo()
-                CET.XMLParser = dummy
-            except RuntimeError:
+                    return Parser()
+                CET.XMLParser = xml_parser
+            except TypeError:
                 missing_libs.append('SAXParser')
                 tips.append("""Run Burp Suite using the following command:
                    <br><code style='background: #f7f7f9; color: red'>$ java -classpath 
@@ -167,9 +177,8 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         keys = {'aws_access_key': self.aws_access_key,
                 'aws_secret_key': self.aws_secret_key,
                 'aws_session_token': self.aws_session_token}
-        self.bucket_scan = BucketScan(request_response, self.callbacks, keys)
-
-        scan_issues = self.bucket_scan.identify_buckets()
+        bucket_scan = BucketScan(request_response, self.callbacks, keys)
+        scan_issues = bucket_scan.identify_buckets()
 
         if len(scan_issues) > 0:
             return scan_issues
@@ -305,14 +314,7 @@ class BucketScan(object):
             error_code = error.response['Error']['Code']
             print 'Error Code (list_objects): ' + str(error_code)
         except ResponseParserError:
-            try:
-                self.client.head_bucket(Bucket=bucket_name)
-                issues.append('READ')
-            except ClientError as error:
-                error_code = error.response['Error']['Code']
-                print 'Error Code (head_bucket): ' + error_code
-            except ResponseParserError:
-                issues.append('s3:ListBucket')
+            issues.append('s3:ListBucket')
 
         try:
             put_acl = self.client.put_bucket_acl(
