@@ -4,28 +4,50 @@ AWS Extender is a [Burpsuite](https://portswigger.net/burp/) plugin to identify 
 
 
 ## Getting Started
-Because of longstanding Jython bugs, this extension requires -- libraries to be loaded at the commandline. This can be doen with the following:
-```
-java -classpath xercesImpl.jar;burpsuite_pro.jar burp.StartBurp
-```
-To make full use of AWS Extender you will need an AWS Secret key, if you don't have an account, one can be obtained for free: https://aws.amazon.com/free/
+##### For general instructions on how to load Burp Suite plugins, please visit the following [URL](https://support.portswigger.net/customer/portal/articles/1965930-how-to-install-an-extension-in-burp-suite).
 
-## Vulnerabilities Covered
+#### Installing Dependency Librarires
+1. Download the file "[requirements.txt](/requirements.txt)".
+1. Run the following command `pip install -r requirements.txt`.
+
+#### Custom Environment Settings
+1. Open the Burp Suite Extender tab.
+2. Click "Options".
+3. Set the "Folder for loading modules" setting to the path of your Python installation's [site-packages directory](https://docs.python.org/2/install/#how-installation-works).
+
+#### Config Options
+In order to make full use of AWS Extender, you will need an AWS access key as well as a secret key. if you don't have an account, one can be obtained for free at "[https://aws.amazon.com/free/](https://aws.amazon.com/free/)".
+
+After obtaining your AWS credentials, you will need to add them through the "AWS Extender" tab as shown below:
+<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/config-tab.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/config-tab-thumb.png?raw=true"></a>
+
+## Tests Covered
 
 ### S3
 
- - Bucket Directory Listing
- - Bucket ACL Exposed
- - Unauthenticated File Upload
- - Authenticated File Upload
- 
-### General AWS
+ - List Bucket (s3:ListBucket)
+ - List Multipart Uploads (s3:ListMultipartUploadParts)
+ - Get Bucket ACL (s3:GetBucketAcl)
+ - Set Bucket ACL (s3:PutBucketAcl)
+ - Upload File (s3:PutObject)
+ - Get Bucket Event Notifications (s3:GetBucketNotification)
+ - Set Bucket Event Notifications (s3:PutBucketNotification)
+ - Get Bucket Policy (s3:GetBucketPolicy)
+ - Set Bucket Policy (s3:PutBucketPolicy)
+ - Get Bucket Tagging (s3:GetBucketTagging)
+ - Set Bucket Tagging (s3:PutBucketTagging)
+ - Get Bucket Website (s3:GetBucketWebsite)
+ - Set Bucket Website (s3:PutBucketWebsite)
+ - Get Bucket CORS (s3:GetBucketCORS)
+ - Set Bucket CORS (s3:PutBucketCORS)
+ - GET Life Cycle Configuration (s3:GetLifecycleConfiguration)
+ - Set Life Cycle Configuration (s3:PutLifecycleConfiguration)
+ - Set Bucket Logging (s3:PutBucketLogging)
 
- - Reference to AWS Metadata IP
- 
+## Screenshots
+<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket_identified.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket_identified.png?raw=true"></a>
+<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket-readable.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket-readable.png?raw=true"></a>
 
-
-
-
-
-
+## Todo
+* Cover more AWS services.
+* Add more tests.
