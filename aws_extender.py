@@ -321,18 +321,6 @@ class BucketScan(object):
             issues.append('s3:ListBucket')
 
         try:
-            put_acl = self.client.put_bucket_acl(
-                GrantFullControl='uri="http://acs.amazonaws.com/groups/global/AllUsers"',
-                Bucket=bucket_name
-            )
-            issues.append('s3:PutBucketAcl')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (put_bucket_acl): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:PutBucketAcl')
-
-        try:
             put_cors = self.client.put_bucket_cors(
                 Bucket=bucket_name,
                 CORSConfiguration={
@@ -434,33 +422,6 @@ class BucketScan(object):
             issues.append('s3:PutBucketNotification')
 
         try:
-            put_policy = self.client.put_bucket_policy(
-                Bucket='string',
-                Policy='''
-                    {
-                    "Version":"2008-10-17",
-                    "Id":"aaaa-bbbb-cccc-dddd",
-                    "Statement" : [
-                        {
-                            "Effect":"Allow",
-                            "Sid":"1", 
-                            "Principal" : {
-                                "AWS":["111122223333","444455556666"]
-                            },
-                            "Action":["s3:*"],
-                            "Resource":"arn:aws:s3:::%s/*"
-                        }
-                     ] 
-                    } ''' % bucket_name
-            )
-            issues.append('s3:PutBucketPolicy')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (put_bucket_policy): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:PutBucketPolicy')
-
-        try:
             put_tagging = self.client.put_bucket_tagging(
                 Bucket=bucket_name,
                 Tagging={
@@ -511,6 +472,45 @@ class BucketScan(object):
             print 'Error Code (put_object): ' + str(error_code)
         except ResponseParserError:
             issues.append('s3:PutObject')
+
+        try:
+            put_acl = self.client.put_bucket_acl(
+                GrantFullControl='uri="http://acs.amazonaws.com/groups/global/AllUsers"',
+                Bucket=bucket_name
+            )
+            issues.append('s3:PutBucketAcl')
+        except ClientError as error:
+            error_code = error.response['Error']['Code']
+            print 'Error Code (put_bucket_acl): ' + str(error_code)
+        except ResponseParserError:
+            issues.append('s3:PutBucketAcl')
+
+        try:
+            put_policy = self.client.put_bucket_policy(
+                Bucket='string',
+                Policy='''
+                    {
+                    "Version":"2008-10-17",
+                    "Id":"aaaa-bbbb-cccc-dddd",
+                    "Statement" : [
+                        {
+                            "Effect":"Allow",
+                            "Sid":"1", 
+                            "Principal" : {
+                                "AWS":["111122223333","444455556666"]
+                            },
+                            "Action":["s3:*"],
+                            "Resource":"arn:aws:s3:::%s/*"
+                        }
+                     ] 
+                    } ''' % bucket_name
+            )
+            issues.append('s3:PutBucketPolicy')
+        except ClientError as error:
+            error_code = error.response['Error']['Code']
+            print 'Error Code (put_bucket_policy): ' + str(error_code)
+        except ResponseParserError:
+            issues.append('s3:PutBucketPolicy')
 
         if not issues:
             return
