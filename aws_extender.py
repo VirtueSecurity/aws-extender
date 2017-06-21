@@ -514,9 +514,9 @@ class BucketScan(object):
 
         if not issues:
             return
-        if 'put_bucket_acl' in issues or len(issues) > 5:
+        if 's3:PutBucketAcl' in issues or len(issues) > 5:
             issuelevel = 'High'
-        elif ('list_objects' in issues and 'put_object' in issues) or len(issues) > 2:
+        elif ('s3:ListBucket' in issues and 's3:PutObject' in issues) or len(issues) > 2:
             issuelevel = 'Medium'
         else:
             issuelevel = 'Low'
