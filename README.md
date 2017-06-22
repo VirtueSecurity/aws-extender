@@ -6,7 +6,7 @@ AWS Extender is a [Burpsuite](https://portswigger.net/burp/) plugin to identify 
 ## Getting Started
 ##### For general instructions on how to load Burp Suite plugins, please visit this [URL](https://support.portswigger.net/customer/portal/articles/1965930-how-to-install-an-extension-in-burp-suite).
 
-#### Installing Dependency Librarires
+#### Installing Dependency Libraries
 1. Download the file "[requirements.txt](/requirements.txt)".
 1. Run the following command `pip install -r requirements.txt`.
 
