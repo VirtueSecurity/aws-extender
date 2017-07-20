@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # Version 0.9
 import re
-import traceback
 import xml.etree.cElementTree as CET
 from array import array
 from datetime import datetime
@@ -11,6 +10,8 @@ try:
     from botocore.handlers import disable_signing
     from botocore.compat import XMLParseError
     from botocore.parsers import ResponseParserError
+    from boto.s3.connection import S3Connection
+    from boto.exception import S3ResponseError
     RUN_TESTS = True
 except ImportError:
     RUN_TESTS = False
@@ -28,7 +29,8 @@ from java.awt import BorderLayout
 from java.awt import GridLayout
 from org.xml.sax import SAXException
 
-identified_buckets = set()
+identified_s3_buckets = set()
+identified_gs_buckets = set()
 tested_uris = set()
 
 
@@ -37,12 +39,16 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         self.ext_name = 'AWS Extender'
         self.callbacks = None
         self.gui_elements = None
-        self.access_key_inpt = None
-        self.secret_key_inpt = None
-        self.session_token_inpt = None
+        self.aws_access_key_inpt = None
+        self.aws_secret_key_inpt = None
+        self.aws_session_token_inpt = None
+        self.gs_access_key_inpt = None
+        self.gs_secret_key_inpt = None
         self.aws_access_key = ''
         self.aws_secret_key = ''
         self.aws_session_token = ''
+        self.gs_access_key = ''
+        self.gs_secret_key = ''
 
     def registerExtenderCallbacks(self, callbacks):
         """Register extender callbacks."""
@@ -124,9 +130,11 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         creds_panel = JPanel(BorderLayout(3, 3))
         creds_panel.setBorder(EmptyBorder(200, 200, 200, 200))
 
-        self.access_key_inpt = JTextField(10)
-        self.secret_key_inpt = JTextField(10)
-        self.session_token_inpt = JTextField(10)
+        self.aws_access_key_inpt = JTextField(10)
+        self.aws_secret_key_inpt = JTextField(10)
+        self.aws_session_token_inpt = JTextField(10)
+        self.gs_access_key_inpt = JTextField(10)
+        self.gs_secret_key_inpt = JTextField(10)
         save_btn = JButton('Save', actionPerformed=self.save_config)
 
         labels = JPanel(GridLayout(0, 1))
@@ -134,39 +142,54 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         creds_panel.add(labels, BorderLayout.WEST)
         creds_panel.add(inputs, BorderLayout.CENTER)
 
-        top_label = JLabel('<html><b>AWS Credentials</b><br><br></html>')
+        top_label = JLabel('<html><b>Account Credentials</b><br><br></html>')
         top_label.setHorizontalAlignment(JLabel.CENTER)
         creds_panel.add(top_label, BorderLayout.NORTH)
-        labels.add(JLabel('Access Key: '))
-        inputs.add(self.access_key_inpt)
-        labels.add(JLabel('Secret Key: '))
-        inputs.add(self.secret_key_inpt)
-        labels.add(JLabel('Session Key (optional): '))
-        inputs.add(self.session_token_inpt)
+        labels.add(JLabel('AWS Access Key: '))
+        inputs.add(self.aws_access_key_inpt)
+        labels.add(JLabel('AWS Secret Key: '))
+        inputs.add(self.aws_secret_key_inpt)
+        labels.add(JLabel('AWS Session Key (optional): '))
+        inputs.add(self.aws_session_token_inpt)
+        labels.add(JLabel('GS Access Key: '))
+        inputs.add(self.gs_access_key_inpt)
+        labels.add(JLabel('GS Secret Key: '))
+        inputs.add(self.gs_secret_key_inpt)
         creds_panel.add(save_btn, BorderLayout.SOUTH)
         return creds_panel
 
     def save_config(self, _):
         """Save settings."""
         save_setting = self.callbacks.saveExtensionSetting
-        save_setting('access_key', self.access_key_inpt.getText())
-        save_setting('secret_key', self.secret_key_inpt.getText())
-        save_setting('session_token', self.session_token_inpt.getText())
+        save_setting('aws_access_key', self.aws_access_key_inpt.getText())
+        save_setting('aws_secret_key', self.aws_secret_key_inpt.getText())
+        save_setting('aws_session_token', self.aws_session_token_inpt.getText())
+        save_setting('gs_access_key', self.gs_access_key_inpt.getText())
+        save_setting('gs_secret_key', self.gs_secret_key_inpt.getText())
+
         self.reload_config()
         return
 
     def reload_config(self):
         """Reload saved settings."""
         load_setting = self.callbacks.loadExtensionSetting
-        access_key_val = load_setting('access_key')
-        secret_key_val = load_setting('secret_key')
-        session_token_val = load_setting('session_token')
-        self.aws_access_key = access_key_val
-        self.aws_secret_key = secret_key_val
-        self.aws_session_token = session_token_val
-        self.access_key_inpt.setText(access_key_val)
-        self.secret_key_inpt.setText(secret_key_val)
-        self.session_token_inpt.setText(session_token_val)
+        aws_access_key_val = load_setting('aws_access_key')
+        aws_secret_key_val = load_setting('aws_secret_key')
+        aws_session_token_val = load_setting('aws_session_token')
+        gs_access_key_val = load_setting('gs_access_key')
+        gs_secret_key_val = load_setting('gs_secret_key')
+
+        self.aws_access_key = aws_access_key_val
+        self.aws_secret_key = aws_secret_key_val
+        self.aws_session_token = aws_session_token_val
+        self.gs_access_key = gs_access_key_val
+        self.gs_secret_key = gs_secret_key_val
+        self.aws_access_key_inpt.setText(aws_access_key_val)
+        self.aws_secret_key_inpt.setText(aws_secret_key_val)
+        self.aws_session_token_inpt.setText(aws_session_token_val)
+        self.gs_access_key_inpt.setText(gs_access_key_val)
+        self.gs_secret_key_inpt.setText(gs_secret_key_val)
+
         return
 
     def getTabCaption(self):
@@ -181,7 +204,9 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         """Perform a passive scan."""
         keys = {'aws_access_key': self.aws_access_key,
                 'aws_secret_key': self.aws_secret_key,
-                'aws_session_token': self.aws_session_token}
+                'aws_session_token': self.aws_session_token,
+                'gs_access_key': self.gs_access_key,
+                'gs_secret_key': self.gs_secret_key}
         bucket_scan = BucketScan(request_response, self.callbacks, keys)
         scan_issues = bucket_scan.identify_buckets()
 
@@ -211,391 +236,475 @@ class BucketScan(object):
         self.aws_access_key = keys['aws_access_key']
         self.aws_secret_key = keys['aws_secret_key']
         self.aws_session_token = keys['aws_session_token']
+        self.gs_access_key = keys['gs_access_key']
+        self.gs_secret_key = keys['gs_secret_key']
         if RUN_TESTS:
-            self.client = boto3.client('s3',
-                                       aws_access_key_id=self.aws_access_key,
-                                       aws_secret_access_key=self.aws_secret_key,
-                                       aws_session_token=self.aws_session_token)
+            self.boto3_client = boto3.client('s3',
+                                             aws_access_key_id=self.aws_access_key,
+                                             aws_secret_access_key=self.aws_secret_key,
+                                             aws_session_token=self.aws_session_token)
+            self.boto_s3_con = S3Connection(
+                aws_access_key_id=self.aws_access_key,
+                aws_secret_access_key=self.aws_secret_key,
+                host='s3.amazonaws.com'
+            )
+            self.boto_gs_con = S3Connection(
+                aws_access_key_id=self.gs_access_key,
+                aws_secret_access_key=self.gs_secret_key,
+                host='storage.googleapis.com'
+            )
+
             if not (self.aws_access_key and self.aws_secret_key):
-                self.client.meta.events.register('choose-signer.s3.*', disable_signing)
+                self.boto3_client.meta.events.register('choose-signer.s3.*', disable_signing)
+                self.boto_s3_con = S3Connection(anon=True)
+
+            if not (self.gs_access_key and self.gs_secret_key):
+                self.boto_gs_con = S3Connection(anon=True, host='storage.googleapis.com')
         return
 
-    def bucket_exists(self, bucket_name):
+    def bucket_exists(self, bucket_name, bucket_type):
         """Confirm if an S3 bucket exists."""
-        try:
-            self.client.head_bucket(Bucket=bucket_name)
-        except ClientError as error:
-            error_code = int(error.response['Error']['Code'])
-            if error_code == 404:
+        if bucket_type == 'S3':
+            try:
+                self.boto3_client.head_bucket(Bucket=bucket_name)
+            except ClientError as error:
+                error_code = int(error.response['Error']['Code'])
+                if error_code == 404:
+                    return False
+        elif bucket_type == 'GS':
+            bucket_exists = self.boto_gs_con.lookup(bucket_name)
+            if not bucket_exists:
                 return False
         return True
 
-    def test_bucket(self, bucket_name, markers):
-        """Test for S3 buckets misconfiguration issues."""
-        read = False
-        write = False
-        read_acp = False
-        write_acp = False
+    def test_bucket(self, bucket_name, bucket_type):
+        """Test for buckets misconfiguration issues."""
+        grants = []
         issues = []
+        keys = []
 
-        try:
-            policy = self.client.get_bucket_acl(Bucket=bucket_name)
-            issues.append('s3:GetBucketAcl')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (get_bucket_acl): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:GetBucketAcl')
+        if bucket_type == 'S3':
+            bucket = self.boto_s3_con.get_bucket(bucket_name, validate=False)
+            try:
+                bucket_acl = bucket.get_acl().acl
+                for grant in bucket_acl.grants:
+                    grants.append((grant.display_name or grant.uri) + '->' + grant.permission)
+                issues.append('s3:GetBucketAcl<ul><li>%s</li></ul>' % '</li><li>'.join(grants))
+            except S3ResponseError as error:
+                print 'Error Code (get_bucket_acl): ' + str(error.error_code)
 
-        try:
-            bucket_cors = self.client.get_bucket_cors(Bucket=bucket_name)
-            issues.append('s3:GetBucketCORS')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (get_bucket_cors): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:GetBucketCORS')
+            try:
+                self.boto3_client.get_bucket_cors(Bucket=bucket_name)
+                issues.append('s3:GetBucketCORS')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (get_bucket_cors): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:GetBucketCORS')
 
-        try:
-            bucket_lifecycle = self.client.get_bucket_lifecycle(Bucket=bucket_name)
-            issues.append('s3:GetLifecycleConfiguration')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (get_bucket_lifecycle): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:GetLifecycleConfiguration')
+            try:
+                self.boto3_client.get_bucket_lifecycle(Bucket=bucket_name)
+                issues.append('s3:GetLifecycleConfiguration')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (get_bucket_lifecycle): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:GetLifecycleConfiguration')
 
-        try:
-            bucket_notification = self.client.get_bucket_notification(Bucket=bucket_name)
-            issues.append('s3:GetBucketNotification')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (get_bucket_notification): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:GetBucketNotification')
+            try:
+                self.boto3_client.get_bucket_notification(Bucket=bucket_name)
+                issues.append('s3:GetBucketNotification')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (get_bucket_notification): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:GetBucketNotification')
 
-        try:
-            bucket_policy = self.client.get_bucket_policy(Bucket=bucket_name)
-            issues.append('s3:GetBucketPolicy')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (get_bucket_policy): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:GetBucketPolicy')
+            try:
+                self.boto3_client.get_bucket_policy(Bucket=bucket_name)
+                issues.append('s3:GetBucketPolicy')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (get_bucket_policy): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:GetBucketPolicy')
 
-        try:
-            bucket_tagging = self.client.get_bucket_tagging(Bucket=bucket_name)
-            print bucket_tagging
-            issues.append('s3:GetBucketTagging')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (get_bucket_tagging): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:GetBucketTagging')
+            try:
+                self.boto3_client.get_bucket_tagging(Bucket=bucket_name)
+                issues.append('s3:GetBucketTagging')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (get_bucket_tagging): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:GetBucketTagging')
 
-        try:
-            bucket_website = self.client.get_bucket_website(Bucket=bucket_name)
-            issues.append('s3:GetBucketWebsite')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (get_bucket_website): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:GetBucketWebsite')
+            try:
+                self.boto3_client.get_bucket_website(Bucket=bucket_name)
+                issues.append('s3:GetBucketWebsite')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (get_bucket_website): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:GetBucketWebsite')
 
-        try:
-            multipart_uploads = self.client.list_multipart_uploads(Bucket=bucket_name)
-            issues.append('s3:ListMultipartUploadParts')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (list_multipart_uploads): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:ListMultipartUploadParts')
+            try:
+                self.boto3_client.list_multipart_uploads(Bucket=bucket_name)
+                issues.append('s3:ListMultipartUploadParts')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (list_multipart_uploads): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:ListMultipartUploadParts')
 
-        try:
-            objects = self.client.list_objects(Bucket=bucket_name)
-            issues.append('s3:ListBucket')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (list_objects): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:ListBucket')
+            try:
+                i = 0
+                for k in bucket.list():
+                    i = i + 1
+                    keys.append(k.key)
+                    if i == 10:
+                        break
+                issues.append('s3:ListBucket<ul><li>%s</li></ul>' % '</li><li>'.join(keys))
+            except S3ResponseError as error:
+                print 'Error Code (list): ' + str(error.error_code)
 
-        try:
-            put_cors = self.client.put_bucket_cors(
-                Bucket=bucket_name,
-                CORSConfiguration={
-                    'CORSRules': [
-                        {
-                            'ExposeHeaders': [
-                                'Authorization',
-                            ],
-                            'AllowedMethods': [
-                                'GET',
-                            ],
-                            'AllowedOrigins': [
-                                '*',
-                            ],
-                            'MaxAgeSeconds': 123
-                        }
-                    ]
-                }
-            )
-            issues.append('s3:PutBucketCORS')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (put_bucket_cors): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:PutBucketCORS')
+            try:
+                self.boto3_client.put_bucket_cors(
+                    Bucket=bucket_name,
+                    CORSConfiguration={
+                        'CORSRules': [
+                            {
+                                'ExposeHeaders': [
+                                    'Authorization',
+                                ],
+                                'AllowedMethods': [
+                                    'GET',
+                                ],
+                                'AllowedOrigins': [
+                                    '*',
+                                ],
+                                'MaxAgeSeconds': 123
+                            }
+                        ]
+                    }
+                )
+                issues.append('s3:PutBucketCORS')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (put_bucket_cors): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:PutBucketCORS')
 
-        try:
-            put_lifecycle_configuration = self.client.put_bucket_lifecycle_configuration(
-                Bucket=bucket_name,
-                LifecycleConfiguration={
-                    'Rules': [
-                        {
-                            'Expiration': {
-                                'Date': datetime(2015, 1, 1),
-                                'Days': 123,
-                                'ExpiredObjectDeleteMarker': True|False
-                            },
-                            'ID': 'test',
-                            'Prefix': 'test',
-                            'Filter': {
-                                'Prefix': 'test',
-                                'Tag': {
-                                    'Key': 'test',
-                                    'Value': 'test'
+            try:
+                self.boto3_client.put_bucket_lifecycle_configuration(
+                    Bucket=bucket_name,
+                    LifecycleConfiguration={
+                        'Rules': [
+                            {
+                                'Expiration': {
+                                    'Date': datetime(2015, 1, 1),
+                                    'Days': 123,
+                                    'ExpiredObjectDeleteMarker': True|False
                                 },
-                                'And': {
+                                'ID': 'test',
+                                'Prefix': 'test',
+                                'Filter': {
                                     'Prefix': 'test',
-                                    'Tags': [
-                                        {
-                                            'Key': 'test',
-                                            'Value': 'test'
-                                        },
-                                    ]
-                                }
-                            },
-                            'Status': 'Enabled'
-                        }
-                    ]
-                }
-            )
-            issues.append('s3:PutLifecycleConfiguration')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (put_bucket_lifecycle_configuration): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:PutLifecycleConfiguration')
-
-        try:
-            put_logging = self.client.put_bucket_logging(
-                Bucket=bucket_name,
-                BucketLoggingStatus={}
-            )
-            issues.append('s3:PutBucketLogging')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (put_bucket_logging): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:PutBucketLogging')
-
-        try:
-            put_notification = self.client.put_bucket_notification(
-                Bucket=bucket_name,
-                NotificationConfiguration={
-                    'TopicConfiguration': {
-                        'Id': 'string',
-                        'Events': [
-                            's3:ReducedRedundancyLostObject',
-                        ],
-                        'Event': 's3:ReducedRedundancyLostObject',
-                        'Topic': 'test'
+                                    'Tag': {
+                                        'Key': 'test',
+                                        'Value': 'test'
+                                    },
+                                    'And': {
+                                        'Prefix': 'test',
+                                        'Tags': [
+                                            {
+                                                'Key': 'test',
+                                                'Value': 'test'
+                                            },
+                                        ]
+                                    }
+                                },
+                                'Status': 'Enabled'
+                            }
+                        ]
                     }
-                }
-            )
-            issues.append('s3:PutBucketNotification')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (put_bucket_notification): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:PutBucketNotification')
+                )
+                issues.append('s3:PutLifecycleConfiguration')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (put_bucket_lifecycle_configuration): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:PutLifecycleConfiguration')
 
-        try:
-            put_tagging = self.client.put_bucket_tagging(
-                Bucket=bucket_name,
-                Tagging={
-                    'TagSet': [
-                        {
-                            'Key': 'test',
-                            'Value': 'test'
+            try:
+                self.boto3_client.put_bucket_logging(
+                    Bucket=bucket_name,
+                    BucketLoggingStatus={}
+                )
+                issues.append('s3:PutBucketLogging')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (put_bucket_logging): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:PutBucketLogging')
+
+            try:
+                self.boto3_client.put_bucket_notification(
+                    Bucket=bucket_name,
+                    NotificationConfiguration={
+                        'TopicConfiguration': {
+                            'Id': 'string',
+                            'Events': [
+                                's3:ReducedRedundancyLostObject',
+                            ],
+                            'Event': 's3:ReducedRedundancyLostObject',
+                            'Topic': 'test'
+                        }
+                    }
+                )
+                issues.append('s3:PutBucketNotification')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (put_bucket_notification): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:PutBucketNotification')
+
+            try:
+                self.boto3_client.put_bucket_tagging(
+                    Bucket=bucket_name,
+                    Tagging={
+                        'TagSet': [
+                            {
+                                'Key': 'test',
+                                'Value': 'test'
+                            },
+                        ]
+                    }
+                )
+                issues.append('s3:PutBucketTagging')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (put_bucket_tagging): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:PutBucketTagging')
+
+            try:
+                self.boto3_client.put_bucket_website(
+                    Bucket=bucket_name,
+                    WebsiteConfiguration={
+                        'ErrorDocument': {
+                            'Key': 'test'
                         },
-                    ]
-                }
-            )
-            issues.append('s3:PutBucketTagging')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (put_bucket_tagging): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:PutBucketTagging')
-
-        try:
-            put_website = self.client.put_bucket_website(
-                Bucket=bucket_name,
-                WebsiteConfiguration={
-                    'ErrorDocument': {
-                        'Key': 'test'
-                    },
-                    'IndexDocument': {
-                        'Suffix': 'test'
-                    }
-                }
-            )
-            issues.append('s3:PutBucketWebsite')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (put_bucket_website): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:PutBucketWebsite')
-
-        try:
-            put_object = self.client.put_object(
-                ACL='public-read-write',
-                Body=b'test',
-                Bucket=bucket_name,
-                Key='test'
-            )
-            issues.append('s3:PutObject')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (put_object): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:PutObject')
-
-        try:
-            put_acl = self.client.put_bucket_acl(
-                GrantFullControl='uri="http://acs.amazonaws.com/groups/global/AllUsers"',
-                Bucket=bucket_name
-            )
-            issues.append('s3:PutBucketAcl')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (put_bucket_acl): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:PutBucketAcl')
-
-        try:
-            put_policy = self.client.put_bucket_policy(
-                Bucket='string',
-                Policy='''
-                    {
-                    "Version":"2008-10-17",
-                    "Id":"aaaa-bbbb-cccc-dddd",
-                    "Statement" : [
-                        {
-                            "Effect":"Allow",
-                            "Sid":"1", 
-                            "Principal" : {
-                                "AWS":["111122223333","444455556666"]
-                            },
-                            "Action":["s3:*"],
-                            "Resource":"arn:aws:s3:::%s/*"
+                        'IndexDocument': {
+                            'Suffix': 'test'
                         }
-                     ] 
-                    } ''' % bucket_name
-            )
-            issues.append('s3:PutBucketPolicy')
-        except ClientError as error:
-            error_code = error.response['Error']['Code']
-            print 'Error Code (put_bucket_policy): ' + str(error_code)
-        except ResponseParserError:
-            issues.append('s3:PutBucketPolicy')
+                    }
+                )
+                issues.append('s3:PutBucketWebsite')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (put_bucket_website): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:PutBucketWebsite')
+
+            try:
+                self.boto3_client.put_object(
+                    ACL='public-read-write',
+                    Body=b'test',
+                    Bucket=bucket_name,
+                    Key='test.txt'
+                )
+                issues.append('s3:PutObject<ul><li>test.txt</li></ul>')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (put_object): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:PutObject')
+
+            try:
+                self.boto3_client.put_bucket_acl(
+                    GrantFullControl='uri="http://acs.amazonaws.com/groups/global/AllUsers"',
+                    Bucket=bucket_name
+                )
+                issues.append('s3:PutBucketAcl')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (put_bucket_acl): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:PutBucketAcl')
+
+            try:
+                self.boto3_client.put_bucket_policy(
+                    Bucket='string',
+                    Policy='''
+                        {
+                        "Version":"2008-10-17",
+                        "Id":"aaaa-bbbb-cccc-dddd",
+                        "Statement" : [
+                            {
+                                "Effect":"Allow",
+                                "Sid":"1", 
+                                "Principal" : {
+                                    "AWS":["111122223333","444455556666"]
+                                },
+                                "Action":["s3:*"],
+                                "Resource":"arn:aws:s3:::%s/*"
+                            }
+                         ] 
+                        } ''' % bucket_name
+                )
+                issues.append('s3:PutBucketPolicy')
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (put_bucket_policy): ' + str(error_code)
+            except ResponseParserError:
+                issues.append('s3:PutBucketPolicy')
+        elif bucket_type == 'GS':
+            try:
+                bucket = self.boto_gs_con.get_bucket(bucket_name, validate=False)
+            except S3ResponseError as error:
+                return False
+
+            try:
+                i = 0
+                for k in bucket.list():
+                    i = i + 1
+                    keys.append(k.key)
+                    if i == 10:
+                        break
+                issues.append('READ<ul><li>%s</li></ul>' % '</li><li>'.join(keys))
+            except S3ResponseError as error:
+                print 'Error Code (list): ' + str(error.error_code)
+
+            try:
+                key = bucket.new_key('test.txt')
+                key.set_contents_from_string('')
+                issues.append('WRITE<ul><li>test.txt</li></ul>')
+            except S3ResponseError as error:
+                print 'Error Code (set_contents_from_string): ' + str(error.error_code)
+
+            try:
+                bucket.add_email_grant('FULL_CONTROL', '')
+            except S3ResponseError as error:
+                if error.error_code == 'MalformedACLError':
+                    issues.append('FULL_CONTROL')
+                else:
+                    print 'Error Code (add_email_grant): ' + str(error.error_code)
+            except AttributeError as error:
+                if error.message.startswith("'Policy'"):
+                    issues.append('FULL_CONTROL')
+                else:
+                    raise
 
         if not issues:
-            return
-        if 's3:PutBucketAcl' in issues or len(issues) > 5:
+            return False
+        if ('s3:PutBucketAcl' in issues or 'FULL_CONTROL' in issues) or len(issues) > 5:
             issuelevel = 'High'
-        elif ('s3:ListBucket' in issues and 's3:PutObject' in issues) or len(issues) > 2:
+        elif ('s3:ListBucket' in issues and 's3:PutObject' in issues) or\
+            ('READ' in issues and 'WRITE' in issues) or len(issues) > 2:
             issuelevel = 'Medium'
         else:
             issuelevel = 'Low'
 
-        issuename = 'S3 Bucket Misconfiguration'
-        issuedetail = '''The "$bucket_name$" S3 bucket grants the following permissions:
-                         <br><li>%s</li><br><br>''' % ('</li><li>'.join(issues))
+        issuename = '%s Bucket Misconfiguration' % bucket_type
+        issuedetail = '''The "%s" %s bucket grants the following permissions:<br>
+                         <li>%s</li><br><br>''' % (bucket_name, bucket_type, '</li><li>'.join(issues))
 
-        self.scan_issues.append(
-            ScanIssue(self.request_response.getHttpService(),
-                      self.helpers.analyzeRequest(self.request_response).getUrl(),
-                      markers, issuename, issuelevel,
-                      issuedetail.replace('$bucket_name$', bucket_name)
-                     )
-        )
+        return {'issuename': issuename, 'issuedetail': issuedetail,
+                'issuelevel': issuelevel}
 
     def identify_buckets(self):
         """Identify S3 buckets."""
-        host = ''
-        bucket_names = []
-        markers = []
-        mark_request = False
-        offset = array('i', [0, 0])
+        scan_issues = []
+        s3_bucket_names = []
+        gs_bucket_names = []
         response = self.request_response.getResponse()
-        request = self.request_response.getRequest()
-        request_str = self.helpers.bytesToString(request)
-        request_len = len(request_str)
         response_str = self.helpers.bytesToString(response)
         response_len = len(response_str)
         response_str = response_str.encode('utf-8', 'replace')
         current_url = self.helpers.analyzeRequest(self.request_response).getUrl()
         current_url_str = re.search(r'\w+://[^/]+', str(current_url)).group(0)
+        host = host = re.search(r'\w+://([\w.-]+)', current_url_str).group(1)
 
         if RUN_TESTS:
-            host = re.search(r'\w+://([\w.-]+)', current_url_str).group(1)
-            bucket_names.append((host, ''))
+            s3_bucket_names.append((host, ''))
+            gs_bucket_names.append((host, ''))
 
-        # Matches S3 bucket names within "amazonaws.com" URIs
-        bucket_name_regex = re.compile(
-            r'(?:([\w.-]+)\.s3[\w.-]*\.amazonaws\.com|s3[\w.-]*\.amazonaws\.com(?:\\?/)*([\w.-]+))',
+        # Matches S3 bucket names
+        s3_buckets_regex = re.compile(
+            r'(?:([\w.-]+)\.s3[\w.-]*\.amazonaws\.com|s3(?:[\w.-]*\.amazonaws\.com(?:\\?/)*|://)([\w.-]+))',
             re.I)
-        bucket_names += re.findall(bucket_name_regex, response_str)
-        for i in xrange(0, len(bucket_names)):
-            offsets = []
-            bucket_name = bucket_names[i]
-            bucket_name = bucket_name[0] or bucket_name[1]
-            if bucket_name in identified_buckets and current_url_str in tested_uris:
-                continue
-            tested_uris.add(current_url_str)
-            identified_buckets.add(bucket_name)
-            if RUN_TESTS and not self.bucket_exists(bucket_name):
-                continue
-            if bucket_name == host:
-                mark_request = True
-                start = self.helpers.indexOf(request,
-                                             bucket_name, True, 0, request_len)
-            else:
-                start = self.helpers.indexOf(response,
-                                             bucket_name, True, 0, response_len)
-            offset[0] = start
-            offset[1] = start + len(bucket_name)
-            offsets.append(offset)
-            if mark_request:
-                markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
-            else:
-                markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
-            issuename = 'S3 Bucket Detected'
-            issuelevel = 'Information'
-            issuedetail = 'The following S3 bucket has been identified:<br><li>$bucket_name$</li>'
-            self.scan_issues.append(
-                ScanIssue(self.request_response.getHttpService(),
-                          current_url, markers, issuename, issuelevel,
-                          issuedetail.replace('$bucket_name$', bucket_name)
-                         )
-            )
+        s3_bucket_names += re.findall(s3_buckets_regex, response_str)
 
-            if RUN_TESTS:
-                self.test_bucket(bucket_name, markers)
-        return self.scan_issues
+        # Matches GS bucket names
+        gs_buckets_regex = re.compile(
+            r'(?:([\w.-]+)\.storage[\w-]*\.googleapis\.com|(?:(?:console\.cloud\.google\.com/storage/browser/|storage[\w-]*\.googleapis\.com)(?:\\?/)*|gs://)([\w.-]+))',
+            re.I)
+        gs_bucket_names += re.findall(gs_buckets_regex, response_str)
+
+        def handle_buckets(bucket_names, bucket_type):
+            """Handle identified buckets."""
+            request = self.request_response.getRequest()
+            request_str = self.helpers.bytesToString(request)
+            request_len = len(request_str)
+            offset = array('i', [0, 0])
+            markers = []
+            mark_request = False
+            for i in xrange(0, len(bucket_names)):
+                offsets = []
+                bucket_name = bucket_names[i]
+                bucket_name = bucket_name[0] or bucket_name[1]
+                if bucket_type == 'S3':
+                    if bucket_name in identified_s3_buckets and current_url_str in tested_uris:
+                        continue
+                    identified_s3_buckets.add(bucket_name)
+                elif bucket_type == 'GS':
+                    if bucket_name in identified_gs_buckets and current_url_str in tested_uris:
+                        continue
+                    identified_gs_buckets.add(bucket_name)
+                tested_uris.add(current_url_str)
+                if RUN_TESTS and not self.bucket_exists(bucket_name, bucket_type):
+                    continue
+                if bucket_name == host:
+                    mark_request = True
+                    start = self.helpers.indexOf(request,
+                                                 bucket_name, True, 0, request_len)
+                else:
+                    start = self.helpers.indexOf(response,
+                                                 bucket_name, True, 0, response_len)
+                offset[0] = start
+                offset[1] = start + len(bucket_name)
+                offsets.append(offset)
+                if mark_request:
+                    markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
+                else:
+                    markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
+                issuename = '%s Bucket Detected' % bucket_type
+                issuelevel = 'Information'
+                issuedetail = '''The following %s bucket has been identified:<br>
+                    <li>$bucket_name$</li>''' % bucket_type
+                scan_issues.append(
+                    ScanIssue(self.request_response.getHttpService(),
+                              current_url, markers, issuename, issuelevel,
+                              issuedetail.replace('$bucket_name$', bucket_name)
+                             )
+                )
+                if RUN_TESTS:
+                    issues = self.test_bucket(bucket_name, bucket_type)
+                    if issues:
+                        scan_issues.append(
+                            ScanIssue(self.request_response.getHttpService(),
+                                      self.helpers.analyzeRequest(self.request_response).getUrl(),
+                                      markers, issues['issuename'], issues['issuelevel'], issues['issuedetail']
+                                     )
+                        )
+
+        if s3_bucket_names:
+            handle_buckets(s3_bucket_names, 'S3')
+
+        if gs_bucket_names:
+            handle_buckets(gs_bucket_names, 'GS')
+
+        return scan_issues
 
 
 class ScanIssue(IScanIssue):
