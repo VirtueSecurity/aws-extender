@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 # Version 0.9
 import re
+import urllib2
 import xml.etree.cElementTree as CET
+from xml.dom.minidom import parse
 from array import array
 from datetime import datetime
 try:
@@ -31,6 +33,7 @@ from org.xml.sax import SAXException
 
 identified_s3_buckets = set()
 identified_gs_buckets = set()
+identified_az_buckets = set()
 tested_uris = set()
 
 
@@ -274,6 +277,12 @@ class BucketScan(object):
         elif bucket_type == 'GS':
             bucket_exists = self.boto_gs_con.lookup(bucket_name)
             if not bucket_exists:
+                return False
+        elif bucket_type == 'Azure':
+            try:
+                bucket_url = 'https://' + bucket_name + '?comp=list&maxresults=10'
+                urllib2.urlopen(urllib2.Request(bucket_url), timeout=10)
+            except (urllib2.HTTPError, urllib2.URLError):
                 return False
         return True
 
@@ -594,6 +603,18 @@ class BucketScan(object):
                     issues.append('FULL_CONTROL')
                 else:
                     raise
+        elif bucket_type == 'Azure':
+            try:
+                bucket_url = 'https://' + bucket_name + '?comp=list&maxresults=10'
+                request = urllib2.Request(bucket_url)
+                response = urllib2.urlopen(request, timeout=10)
+                blobs = parse(response).documentElement.getElementsByTagName('Name')
+                for blob in blobs:
+                    keys.append(blob.firstChild.nodeValue.encode('utf-8'))
+                issues.append('Full public read access<ul><li>%s</li></ul>' %
+                              '</li><li>'.join(keys))
+            except (AttributeError, urllib2.HTTPError, urllib2.URLError):
+                pass
 
         if not issues:
             return False
@@ -617,6 +638,7 @@ class BucketScan(object):
         scan_issues = []
         s3_bucket_names = []
         gs_bucket_names = []
+        az_bucket_uris = []
         response = self.request_response.getResponse()
         response_str = self.helpers.bytesToString(response)
         response_len = len(response_str)
@@ -641,6 +663,12 @@ class BucketScan(object):
             re.I)
         gs_bucket_names += re.findall(gs_buckets_regex, response_str)
 
+        # Matches Azure container URIs
+        az_buckets_regex = re.compile(
+            r'[\w.-]+[\w.-]*\.blob\.core\.windows\.net(?:/|\\/)[\w.-]+',
+            re.I)
+        az_bucket_uris = re.findall(az_buckets_regex, response_str)
+
         def handle_buckets(bucket_names, bucket_type):
             """Handle identified buckets."""
             request = self.request_response.getRequest()
@@ -652,7 +680,8 @@ class BucketScan(object):
             for i in xrange(0, len(bucket_names)):
                 offsets = []
                 bucket_name = bucket_names[i]
-                bucket_name = bucket_name[0] or bucket_name[1]
+                if not isinstance(bucket_name, str):
+                    bucket_name = bucket_name[0] or bucket_name[1]
                 if bucket_type == 'S3':
                     if bucket_name in identified_s3_buckets and current_url_str in tested_uris:
                         continue
@@ -661,6 +690,10 @@ class BucketScan(object):
                     if bucket_name in identified_gs_buckets and current_url_str in tested_uris:
                         continue
                     identified_gs_buckets.add(bucket_name)
+                elif bucket_type == 'Azure':
+                    if bucket_name in identified_az_buckets and current_url_str in tested_uris:
+                        continue
+                    identified_az_buckets.add(bucket_name)
                 tested_uris.add(current_url_str)
                 if RUN_TESTS and not self.bucket_exists(bucket_name, bucket_type):
                     continue
@@ -703,6 +736,9 @@ class BucketScan(object):
 
         if gs_bucket_names:
             handle_buckets(gs_bucket_names, 'GS')
+
+        if az_bucket_uris:
+            handle_buckets(az_bucket_uris, 'Azure')
 
         return scan_issues
 
