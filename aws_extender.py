@@ -93,8 +93,8 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
             </html>"""
 
         if not RUN_TESTS:
-            missing_libs.append('boto3')
-            tips.append('Make sure that the boto3 library is installed properly, and\
+            missing_libs.append('boto/boto3')
+            tips.append('Make sure that the boto/boto3 library is installed properly, and\
                 the right path is specified in the "Folder for loading modules" setting.')
         try:
             CET.fromstring('<test></test>')
@@ -826,6 +826,7 @@ class CognitoScan(object):
             verify_identity_pools(identity_pools)
 
         return self.scan_issues
+
 
 class ScanIssue(IScanIssue):
     def __init__(self, http_service, url, request_response, name, severity, detail_msg):
