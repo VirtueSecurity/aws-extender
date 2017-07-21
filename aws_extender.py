@@ -714,12 +714,10 @@ class BucketScan(object):
                 issuename = '%s Bucket Detected' % bucket_type
                 issuelevel = 'Information'
                 issuedetail = '''The following %s bucket has been identified:<br>
-                    <li>$bucket_name$</li>''' % bucket_type
+                    <li>%s</li>''' % (bucket_type, bucket_name)
                 scan_issues.append(
                     ScanIssue(self.request_response.getHttpService(),
-                              current_url, markers, issuename, issuelevel,
-                              issuedetail.replace('$bucket_name$', bucket_name)
-                             )
+                              current_url, markers, issuename, issuelevel, issuedetail)
                 )
                 if RUN_TESTS:
                     issues = self.test_bucket(bucket_name, bucket_type)
