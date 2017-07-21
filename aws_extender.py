@@ -34,6 +34,7 @@ from org.xml.sax import SAXException
 identified_s3_buckets = set()
 identified_gs_buckets = set()
 identified_az_buckets = set()
+identified_pool_ids = set()
 tested_uris = set()
 
 
@@ -205,14 +206,18 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
 
     def doPassiveScan(self, request_response):
         """Perform a passive scan."""
+        scan_issues = []
         keys = {'aws_access_key': self.aws_access_key,
                 'aws_secret_key': self.aws_secret_key,
                 'aws_session_token': self.aws_session_token,
                 'gs_access_key': self.gs_access_key,
                 'gs_secret_key': self.gs_secret_key}
         bucket_scan = BucketScan(request_response, self.callbacks, keys)
-        scan_issues = bucket_scan.identify_buckets()
+        bucket_issues = bucket_scan.identify_buckets()
+        cognito_scan = CognitoScan(request_response, self.callbacks)
+        cognito_issues = cognito_scan.identify_identity_pools()
 
+        scan_issues = bucket_issues + cognito_issues
         if len(scan_issues) > 0:
             return scan_issues
         return None
@@ -231,6 +236,7 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
 
 
 class BucketScan(object):
+    """Scan cloud storage buckets."""
     def __init__(self, request_response, callbacks, keys):
         self.request_response = request_response
         self.callbacks = callbacks
@@ -558,7 +564,7 @@ class BucketScan(object):
                                 "Action":["s3:*"],
                                 "Resource":"arn:aws:s3:::%s/*"
                             }
-                         ] 
+                         ]
                         } ''' % bucket_name
                 )
                 issues.append('s3:PutBucketPolicy')
@@ -694,7 +700,6 @@ class BucketScan(object):
                     if bucket_name in identified_az_buckets and current_url_str in tested_uris:
                         continue
                     identified_az_buckets.add(bucket_name)
-                tested_uris.add(current_url_str)
                 if RUN_TESTS and not self.bucket_exists(bucket_name, bucket_type):
                     continue
                 if bucket_name == host:
@@ -728,6 +733,7 @@ class BucketScan(object):
                                       markers, issues['issuename'], issues['issuelevel'], issues['issuedetail']
                                      )
                         )
+                tested_uris.add(current_url_str)
 
         if s3_bucket_names:
             handle_buckets(s3_bucket_names, 'S3')
@@ -740,6 +746,86 @@ class BucketScan(object):
 
         return scan_issues
 
+
+class CognitoScan(object):
+    """Identify and test Cognito identity pools."""
+    def __init__(self, request_response, callbacks):
+        self.request_response = request_response
+        self.callbacks = callbacks
+        self.helpers = self.callbacks.getHelpers()
+        self.scan_issues = []
+
+    def identify_identity_pools(self):
+        """Identify Cognito identity pools."""
+        response = self.request_response.getResponse()
+        response_str = self.helpers.bytesToString(response)
+        response_len = len(response_str)
+        response_str = response_str.encode('utf-8', 'replace')
+        current_url = self.helpers.analyzeRequest(self.request_response).getUrl()
+        identity_pool_regex = re.compile(
+            r'((us-[\w-]+):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})',
+            re.I)
+        identity_pools = re.findall(identity_pool_regex, response_str)
+        offset = array('i', [0, 0])
+
+        def obtain_unauth_token(identity_pool_id, identity_id, region, markers):
+            """Obtain an unauthenticated identity token."""
+            offsets = []
+            client = boto3.client('cognito-identity', region_name=region)
+            try:
+                token = client.get_open_id_token(IdentityId=identity_id)['Token']
+            except (ClientError, KeyError):
+                return
+            issuename = 'Cognito Unauthenticated Identities Enabled'
+            issuelevel = 'Information'
+            issuedetail = '''The following identity pool allows unauthenticated identities:
+                <br><ul><li>%s</li></ul><br>The following identity ID has been obtained:
+                <ul><li>%s</li></ul><br>The following token has been obtained:
+                <ul><li>%s</li></ul>''' % (identity_pool_id, identity_id, token)
+            self.scan_issues.append(
+                ScanIssue(self.request_response.getHttpService(),
+                          current_url, markers, issuename, issuelevel, issuedetail)
+            )
+
+        def verify_identity_pools(identity_pool_ids):
+            """Verify identity pools."""
+            for i in xrange(0, len(identity_pool_ids)):
+                offsets = []
+                identity_id = ''
+                identity_pool_id = identity_pool_ids[i]
+                region = identity_pool_id[1]
+                identity_pool_id = identity_pool_id[0]
+                client = boto3.client('cognito-identity', region_name=region)
+                if identity_pool_id in identified_pool_ids:
+                    continue
+                if RUN_TESTS:
+                    try:
+                        identity_id = client.get_id(IdentityPoolId=identity_pool_id)
+                        identity_id = identity_id['IdentityId'].encode('utf-8')
+                    except ClientError:
+                        continue
+                start = self.helpers.indexOf(response,
+                                             identity_pool_id, True, 0, response_len)
+                offset[0] = start
+                offset[1] = start + len(identity_pool_id)
+                offsets.append(offset)
+                markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
+                issuename = 'Cognito Identity Pool Detected'
+                issuelevel = 'Information'
+                issuedetail = '''The following identity pool ID has been identified:<br>
+                    <li>%s</li>''' % identity_pool_id
+                self.scan_issues.append(
+                    ScanIssue(self.request_response.getHttpService(),
+                              current_url, markers, issuename, issuelevel, issuedetail)
+                )
+                identified_pool_ids.add(identity_pool_id)
+                if RUN_TESTS and identity_id:
+                    obtain_unauth_token(identity_pool_id, identity_id, region, markers)
+
+        if identity_pools:
+            verify_identity_pools(identity_pools)
+
+        return self.scan_issues
 
 class ScanIssue(IScanIssue):
     def __init__(self, http_service, url, request_response, name, severity, detail_msg):
