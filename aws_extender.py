@@ -101,11 +101,11 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         except SAXException:
             # Try to workaround "http://bugs.jython.org/issue1127"
             try:
-                def xml_parser(**kwargs):
+                def xml_parser(**_):
                     class Parser(object):
-                        def feed(*args):
+                        def feed(*_):
                             raise XMLParseError
-                        def close(*args):
+                        def close(*_):
                             return None
                     return Parser()
                 CET.XMLParser = xml_parser
@@ -223,7 +223,7 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         return None
 
     @staticmethod
-    def doActiveScan(*args):
+    def doActiveScan(*_):
         pass
 
     @staticmethod
