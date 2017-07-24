@@ -770,7 +770,6 @@ class CognitoScan(object):
 
         def obtain_unauth_token(identity_pool_id, identity_id, region, markers):
             """Obtain an unauthenticated identity token."""
-            offsets = []
             client = boto3.client('cognito-identity', region_name=region)
             try:
                 token = client.get_open_id_token(IdentityId=identity_id)['Token']
