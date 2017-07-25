@@ -300,7 +300,7 @@ class BucketScan(object):
                 if not re.search(r'^\w://', bucket_name):
                     bucket_url = 'https://' + bucket_name
                 bucket_url += '?comp=list&maxresults=10'
-                urllib2.urlopen(urllib2.Request(bucket_url), timeout=10)
+                urllib2.urlopen(urllib2.Request(bucket_url), timeout=20)
             except (urllib2.HTTPError, urllib2.URLError):
                 return False
         return True
@@ -628,7 +628,7 @@ class BucketScan(object):
                     bucket_url = 'https://' + bucket_name
                 bucket_url += '?comp=list&maxresults=10'
                 request = urllib2.Request(bucket_url)
-                response = urllib2.urlopen(request, timeout=10)
+                response = urllib2.urlopen(request, timeout=20)
                 blobs = parse(response).documentElement.getElementsByTagName('Name')
                 for blob in blobs:
                     keys.append(blob.firstChild.nodeValue.encode('utf-8'))
