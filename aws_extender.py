@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Version 0.9
 import re
+import time
+import urllib
 import urllib2
 import xml.etree.cElementTree as CET
 from xml.dom.minidom import parse
@@ -213,7 +215,7 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
                 'gs_access_key': self.gs_access_key,
                 'gs_secret_key': self.gs_secret_key}
         bucket_scan = BucketScan(request_response, self.callbacks, keys)
-        bucket_issues = bucket_scan.identify_buckets()
+        bucket_issues = bucket_scan.check_buckets()
         cognito_scan = CognitoScan(request_response, self.callbacks)
         cognito_issues = cognito_scan.identify_identity_pools()
 
@@ -241,6 +243,15 @@ class BucketScan(object):
         self.request_response = request_response
         self.callbacks = callbacks
         self.helpers = self.callbacks.getHelpers()
+        self.request = self.request_response.getRequest()
+        self.request_str = self.helpers.bytesToString(self.request)
+        self.request_len = len(self.request_str)
+        self.response = self.request_response.getResponse()
+        self.response_str = self.helpers.bytesToString(self.response)
+        self.response_len = len(self.response_str)
+        self.response_str = self.response_str.encode('utf-8', 'replace')
+        self.offset = array('i', [0, 0])
+        self.current_url = self.helpers.analyzeRequest(self.request_response).getUrl()
         self.scan_issues = []
         self.aws_access_key = keys['aws_access_key']
         self.aws_secret_key = keys['aws_secret_key']
@@ -286,7 +297,9 @@ class BucketScan(object):
                 return False
         elif bucket_type == 'Azure':
             try:
-                bucket_url = 'https://' + bucket_name + '?comp=list&maxresults=10'
+                if not re.search(r'^\w://', bucket_name):
+                    bucket_url = 'https://' + bucket_name
+                bucket_url += '?comp=list&maxresults=10'
                 urllib2.urlopen(urllib2.Request(bucket_url), timeout=10)
             except (urllib2.HTTPError, urllib2.URLError):
                 return False
@@ -611,7 +624,9 @@ class BucketScan(object):
                     raise
         elif bucket_type == 'Azure':
             try:
-                bucket_url = 'https://' + bucket_name + '?comp=list&maxresults=10'
+                if not re.search(r'^\w://', bucket_name):
+                    bucket_url = 'https://' + bucket_name
+                bucket_url += '?comp=list&maxresults=10'
                 request = urllib2.Request(bucket_url)
                 response = urllib2.urlopen(request, timeout=10)
                 blobs = parse(response).documentElement.getElementsByTagName('Name')
@@ -639,55 +654,76 @@ class BucketScan(object):
         return {'issuename': issuename, 'issuedetail': issuedetail,
                 'issuelevel': issuelevel}
 
-    def identify_buckets(self):
-        """Identify S3 buckets."""
-        scan_issues = []
+    def check_timestamp(self, bucket_url, bucket_type, timestamp):
+        """Check timestamps of signed URLs."""
+        offsets = []
+        start = self.helpers.indexOf(self.response,
+                                     timestamp, True, 0, self.response_len)
+        self.offset[0] = start
+        self.offset[1] = start + len(timestamp)
+        offsets.append(self.offset)
+        markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
+
+        if bucket_type != 'Azure':
+            now = int(time.time())
+            diff = (int(timestamp) - now) / 3600
+        else:
+            timestamp = urllib.unquote(timestamp)
+            timestamp = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S%fZ')
+            diff = int((timestamp - datetime.now()).total_seconds()) / 3600
+
+        if diff > 24:
+            issuename = '%s Signed URL Excessive Expiration Time' % bucket_type
+            issuelevel = 'Information'
+            issuedetail = '''The following %s signed URL was found to be valid for more than
+                24 hours (expires in %sh):<br><li>%s</li>''' % (bucket_type, diff, bucket_url)
+            self.scan_issues.append(
+                ScanIssue(self.request_response.getHttpService(),
+                          self.current_url, markers, issuename, issuelevel, issuedetail)
+            )
+
+    def check_buckets(self):
+        """Check storage buckets."""
         s3_bucket_names = []
         gs_bucket_names = []
         az_bucket_uris = []
-        response = self.request_response.getResponse()
-        response_str = self.helpers.bytesToString(response)
-        response_len = len(response_str)
-        response_str = response_str.encode('utf-8', 'replace')
-        current_url = self.helpers.analyzeRequest(self.request_response).getUrl()
-        current_url_str = re.search(r'\w+://[^/]+', str(current_url)).group(0)
+        current_url_str = re.search(r'\w+://[^/]+', str(self.current_url)).group(0)
         host = host = re.search(r'\w+://([\w.-]+)', current_url_str).group(1)
 
         if RUN_TESTS:
-            s3_bucket_names.append((host, ''))
-            gs_bucket_names.append((host, ''))
+            s3_bucket_names.append(('', host, ''))
+            gs_bucket_names.append(('', host, ''))
 
         # Matches S3 bucket names
         s3_buckets_regex = re.compile(
-            r'(?:([\w.-]+)\.s3[\w.-]*\.amazonaws\.com|s3(?:[\w.-]*\.amazonaws\.com(?:\\?/)*|://)([\w.-]+))',
+            r'((?:\w+://)?(?:([\w.-]+)\.s3[\w.-]*\.amazonaws\.com|s3(?:[\w.-]*\.amazonaws\.com(?:\\?/)*|://)([\w.-]+))(?:.*?\?.*Expires=(\d+))?)',
             re.I)
-        s3_bucket_names += re.findall(s3_buckets_regex, response_str)
+        s3_bucket_names += re.findall(s3_buckets_regex, self.response_str)
 
         # Matches GS bucket names
         gs_buckets_regex = re.compile(
-            r'(?:([\w.-]+)\.storage[\w-]*\.googleapis\.com|(?:(?:console\.cloud\.google\.com/storage/browser/|storage[\w-]*\.googleapis\.com)(?:\\?/)*|gs://)([\w.-]+))',
+            r'((?:\w+://)?(?:([\w.-]+)\.storage[\w-]*\.googleapis\.com|(?:(?:console\.cloud\.google\.com/storage/browser/|storage[\w-]*\.googleapis\.com)(?:\\?/)*|gs://)([\w.-]+))(?:.*\?.*Expires=(\d+))?)',
             re.I)
-        gs_bucket_names += re.findall(gs_buckets_regex, response_str)
+        gs_bucket_names += re.findall(gs_buckets_regex, self.response_str)
 
         # Matches Azure container URIs
         az_buckets_regex = re.compile(
-            r'[\w.-]+[\w.-]*\.blob\.core\.windows\.net(?:/|\\/)[\w.-]+',
+            r'(((?:\w+://)?[\w.-]+\.blob\.core\.windows\.net(?:/|\\/)[\w.-]+)(?:.*?\?.*se=([\w%-]+))?)',
             re.I)
-        az_bucket_uris = re.findall(az_buckets_regex, response_str)
+        az_bucket_uris = re.findall(az_buckets_regex, self.response_str)
 
-        def handle_buckets(bucket_names, bucket_type):
-            """Handle identified buckets."""
-            request = self.request_response.getRequest()
-            request_str = self.helpers.bytesToString(request)
-            request_len = len(request_str)
-            offset = array('i', [0, 0])
-            markers = []
+        def assess_buckets(bucket_matches, bucket_type):
+            """Assess identified buckets."""
             mark_request = False
-            for i in xrange(0, len(bucket_names)):
+            for i in xrange(0, len(bucket_matches)):
                 offsets = []
-                bucket_name = bucket_names[i]
-                if not isinstance(bucket_name, str):
-                    bucket_name = bucket_name[0] or bucket_name[1]
+                bucket_match = bucket_matches[i]
+                bucket_url = bucket_match[0]
+                bucket_name = bucket_match[1] or bucket_match[2]
+                timestamp = bucket_match[-1]
+                if timestamp and bucket_url not in tested_uris:
+                    self.check_timestamp(bucket_url, bucket_type, timestamp)
+                    tested_uris.add(bucket_url)
                 if bucket_type == 'S3':
                     if bucket_name in identified_s3_buckets and current_url_str in tested_uris:
                         continue
@@ -704,14 +740,14 @@ class BucketScan(object):
                     continue
                 if bucket_name == host:
                     mark_request = True
-                    start = self.helpers.indexOf(request,
-                                                 bucket_name, True, 0, request_len)
+                    start = self.helpers.indexOf(self.request,
+                                                 bucket_name, True, 0, self.request_len)
                 else:
-                    start = self.helpers.indexOf(response,
-                                                 bucket_name, True, 0, response_len)
-                offset[0] = start
-                offset[1] = start + len(bucket_name)
-                offsets.append(offset)
+                    start = self.helpers.indexOf(self.response,
+                                                 bucket_name, True, 0, self.response_len)
+                self.offset[0] = start
+                self.offset[1] = start + len(bucket_name)
+                offsets.append(self.offset)
                 if mark_request:
                     markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
                 else:
@@ -720,14 +756,14 @@ class BucketScan(object):
                 issuelevel = 'Information'
                 issuedetail = '''The following %s bucket has been identified:<br>
                     <li>%s</li>''' % (bucket_type, bucket_name)
-                scan_issues.append(
+                self.scan_issues.append(
                     ScanIssue(self.request_response.getHttpService(),
-                              current_url, markers, issuename, issuelevel, issuedetail)
+                              self.current_url, markers, issuename, issuelevel, issuedetail)
                 )
                 if RUN_TESTS:
                     issues = self.test_bucket(bucket_name, bucket_type)
                     if issues:
-                        scan_issues.append(
+                        self.scan_issues.append(
                             ScanIssue(self.request_response.getHttpService(),
                                       self.helpers.analyzeRequest(self.request_response).getUrl(),
                                       markers, issues['issuename'], issues['issuelevel'], issues['issuedetail']
@@ -736,15 +772,15 @@ class BucketScan(object):
                 tested_uris.add(current_url_str)
 
         if s3_bucket_names:
-            handle_buckets(s3_bucket_names, 'S3')
+            assess_buckets(s3_bucket_names, 'S3')
 
         if gs_bucket_names:
-            handle_buckets(gs_bucket_names, 'GS')
+            assess_buckets(gs_bucket_names, 'GS')
 
         if az_bucket_uris:
-            handle_buckets(az_bucket_uris, 'Azure')
+            assess_buckets(az_bucket_uris, 'Azure')
 
-        return scan_issues
+        return self.scan_issues
 
 
 class CognitoScan(object):
