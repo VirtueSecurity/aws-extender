@@ -33,11 +33,11 @@ from java.awt import BorderLayout
 from java.awt import GridLayout
 from org.xml.sax import SAXException
 
-identified_s3_buckets = set()
-identified_gs_buckets = set()
-identified_az_buckets = set()
-identified_pool_ids = set()
-tested_uris = set()
+IDENTIFIED_S3_BUCKETS = set()
+IDENTIFIED_GS_BUCKETS = set()
+IDENTIFIED_AZ_BUCKETS = set()
+IDENTIFIED_POOL_IDS = set()
+TESTED_URIS = set()
 
 
 class BurpExtender(IBurpExtender, IScannerCheck, ITab):
@@ -73,7 +73,6 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         callbacks.addSuiteTab(self)
         self.reload_config()
         self.show_errors()
-        return
 
     def show_errors(self):
         """Display loading errors."""
@@ -174,7 +173,6 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         save_setting('gs_secret_key', self.gs_secret_key_inpt.getText())
 
         self.reload_config()
-        return
 
     def reload_config(self):
         """Reload saved settings."""
@@ -195,8 +193,6 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         self.aws_session_token_inpt.setText(aws_session_token_val)
         self.gs_access_key_inpt.setText(gs_access_key_val)
         self.gs_secret_key_inpt.setText(gs_secret_key_val)
-
-        return
 
     def getTabCaption(self):
         """Return tab caption."""
@@ -258,7 +254,7 @@ class BucketScan(object):
         self.aws_session_token = keys['aws_session_token']
         self.gs_access_key = keys['gs_access_key']
         self.gs_secret_key = keys['gs_secret_key']
-        if RUN_TESTS:
+        try:
             self.boto3_client = boto3.client('s3',
                                              aws_access_key_id=self.aws_access_key,
                                              aws_secret_access_key=self.aws_secret_key,
@@ -280,7 +276,8 @@ class BucketScan(object):
 
             if not (self.gs_access_key and self.gs_secret_key):
                 self.boto_gs_con = S3Connection(anon=True, host='storage.googleapis.com')
-        return
+        except NameError:
+            pass
 
     def bucket_exists(self, bucket_name, bucket_type):
         """Confirm if an S3 bucket exists."""
@@ -649,7 +646,8 @@ class BucketScan(object):
 
         issuename = '%s Bucket Misconfiguration' % bucket_type
         issuedetail = '''The "%s" %s bucket grants the following permissions:<br>
-                         <li>%s</li><br><br>''' % (bucket_name, bucket_type, '</li><li>'.join(issues))
+                         <li>%s</li><br><br>''' % (bucket_name, bucket_type,
+                                                   '</li><li>'.join(issues))
 
         return {'issuename': issuename, 'issuedetail': issuedetail,
                 'issuelevel': issuelevel}
@@ -682,27 +680,92 @@ class BucketScan(object):
                           self.current_url, markers, issuename, issuelevel, issuedetail)
             )
 
+    def test_object(self, bucket_name, bucket_type, key):
+        """Test individual bucket objects."""
+        issues = []
+        grants = []
+        offsets = []
+        issuename = ''
+        norm_key = key.replace('\\', '')
+
+        if bucket_type == 'S3':
+            bucket = self.boto_s3_con.get_bucket(bucket_name, validate=False)
+        else:
+            bucket = self.boto_gs_con.get_bucket(bucket_name, validate=False)
+
+        key_obj = bucket.get_key(norm_key)
+        if not key_obj:
+            return
+        issues.append('READ')
+
+        try:
+            key_acl = key_obj.get_acl().acl
+            for grant in key_acl.grants:
+                grants.append((grant.display_name or grant.uri) + '->' + grant.permission)
+            issues.append('s3:GetObjectAcl<ul><li>%s</li></ul>' % '</li><li>'.join(grants))
+        except S3ResponseError:
+            pass
+
+        try:
+            key_obj.add_email_grant('FULL_CONTROL', '')
+        except S3ResponseError as error:
+            error_code = error.error_code
+            if error_code == 'UnresolvableGrantByEmailAddress' or\
+                error_code == 'MalformedACLError':
+                issues.append('s3:PutObjectAcl')
+        except AttributeError as error:
+            if error.message.startswith("'Policy'"):
+                issues.append('s3:PutObjectAcl')
+            else:
+                raise
+
+        start = self.helpers.indexOf(self.response, key, True, 0, self.response_len)
+        self.offset[0] = start
+        self.offset[1] = start + len(key)
+        offsets.append(self.offset)
+        markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
+
+        if not issues:
+            return
+        if 'READ' in issues and len(issues) < 2:
+            issuelevel = 'Information'
+            issuename = '%s Object Publicly Accessible' % bucket_type
+        elif 's3:PutObjectAcl' in issues:
+            issuelevel = 'High'
+        else:
+            issuelevel = 'Low'
+
+        if not issuename:
+            issuename = '%s Object Misconfiguration' % bucket_type
+        issuedetail = '''The following ACL grants were found set on the "%s" object of
+            the "%s" %s bucket:<br><li>%s</li>''' % (norm_key, bucket_name, bucket_type,
+                                                     '</li><li>'.join(issues))
+        self.scan_issues.append(
+            ScanIssue(self.request_response.getHttpService(),
+                      self.current_url, markers, issuename, issuelevel, issuedetail)
+        )
+
     def check_buckets(self):
         """Check storage buckets."""
         s3_bucket_names = []
         gs_bucket_names = []
         az_bucket_uris = []
         current_url_str = re.search(r'\w+://[^/]+', str(self.current_url)).group(0)
-        host = host = re.search(r'\w+://([\w.-]+)', current_url_str).group(1)
+        host = re.search(r'\w+://([\w.-]+)', current_url_str).group(1)
 
         if RUN_TESTS:
-            s3_bucket_names.append(('', host, ''))
-            gs_bucket_names.append(('', host, ''))
+            s3_bucket_names.append(('', host, '', ''))
+            gs_bucket_names.append(('', host, '', ''))
 
         # Matches S3 bucket names
         s3_buckets_regex = re.compile(
-            r'((?:\w+://)?(?:([\w.-]+)\.s3[\w.-]*\.amazonaws\.com|s3(?:[\w.-]*\.amazonaws\.com(?:\\?/)*|://)([\w.-]+))(?:.*?\?.*Expires=(\d+))?)',
+            r'((?:\w+://)?(?:([\w.-]+)\.s3[\w.-]*\.amazonaws\.com|s3(?:[\w.-]*\.amazonaws\.com(?:\\?/)*|://)([\w.-]+))(?:\\?/([^\s?#]*))?(?:.*?\?.*Expires=(\d+))?)',
             re.I)
         s3_bucket_names += re.findall(s3_buckets_regex, self.response_str)
 
         # Matches GS bucket names
         gs_buckets_regex = re.compile(
-            r'((?:\w+://)?(?:([\w.-]+)\.storage[\w-]*\.googleapis\.com|(?:(?:console\.cloud\.google\.com/storage/browser/|storage[\w-]*\.googleapis\.com)(?:\\?/)*|gs://)([\w.-]+))(?:.*\?.*Expires=(\d+))?)',
+            r'((?:\w+://)?(?:([\w.-]+)\.storage[\w-]*\.googleapis\.com|(?:(?:console\.cloud\.google\.com/storage/browser/|storage[\w-]*\.googleapis\.com)(?:\\?/)*|gs://)([\w.-]+))(?:\\?/([^\s?#]*))?(?:.*\?.*Expires=(\d+))?)',
             re.I)
         gs_bucket_names += re.findall(gs_buckets_regex, self.response_str)
 
@@ -721,23 +784,29 @@ class BucketScan(object):
                 bucket_url = bucket_match[0]
                 bucket_name = bucket_match[1] or bucket_match[2]
                 timestamp = bucket_match[-1]
-                if timestamp and bucket_url not in tested_uris:
-                    self.check_timestamp(bucket_url, bucket_type, timestamp)
-                    tested_uris.add(bucket_url)
-                if bucket_type == 'S3':
-                    if bucket_name in identified_s3_buckets and current_url_str in tested_uris:
-                        continue
-                    identified_s3_buckets.add(bucket_name)
-                elif bucket_type == 'GS':
-                    if bucket_name in identified_gs_buckets and current_url_str in tested_uris:
-                        continue
-                    identified_gs_buckets.add(bucket_name)
-                elif bucket_type == 'Azure':
-                    if bucket_name in identified_az_buckets and current_url_str in tested_uris:
-                        continue
-                    identified_az_buckets.add(bucket_name)
                 if RUN_TESTS and not self.bucket_exists(bucket_name, bucket_type):
                     continue
+                try:
+                    key = bucket_match[3]
+                    if RUN_TESTS and key and bucket_url not in TESTED_URIS:
+                        self.test_object(bucket_name, bucket_type, key)
+                except IndexError:
+                    pass
+                if timestamp and bucket_url not in TESTED_URIS:
+                    self.check_timestamp(bucket_url, bucket_type, timestamp)
+                    TESTED_URIS.add(bucket_url)
+                if bucket_type == 'S3':
+                    if bucket_name in IDENTIFIED_S3_BUCKETS and current_url_str in TESTED_URIS:
+                        continue
+                    IDENTIFIED_S3_BUCKETS.add(bucket_name)
+                elif bucket_type == 'GS':
+                    if bucket_name in IDENTIFIED_GS_BUCKETS and current_url_str in TESTED_URIS:
+                        continue
+                    IDENTIFIED_GS_BUCKETS.add(bucket_name)
+                elif bucket_type == 'Azure':
+                    if bucket_name in IDENTIFIED_AZ_BUCKETS and current_url_str in TESTED_URIS:
+                        continue
+                    IDENTIFIED_AZ_BUCKETS.add(bucket_name)
                 if bucket_name == host:
                     mark_request = True
                     start = self.helpers.indexOf(self.request,
@@ -769,7 +838,7 @@ class BucketScan(object):
                                       markers, issues['issuename'], issues['issuelevel'], issues['issuedetail']
                                      )
                         )
-                tested_uris.add(current_url_str)
+                TESTED_URIS.add(current_url_str)
 
         if s3_bucket_names:
             assess_buckets(s3_bucket_names, 'S3')
@@ -830,15 +899,16 @@ class CognitoScan(object):
                 identity_pool_id = identity_pool_ids[i]
                 region = identity_pool_id[1]
                 identity_pool_id = identity_pool_id[0]
-                client = boto3.client('cognito-identity', region_name=region)
-                if identity_pool_id in identified_pool_ids:
+                if identity_pool_id in IDENTIFIED_POOL_IDS:
                     continue
-                if RUN_TESTS:
-                    try:
-                        identity_id = client.get_id(IdentityPoolId=identity_pool_id)
-                        identity_id = identity_id['IdentityId'].encode('utf-8')
-                    except ClientError:
-                        continue
+                try:
+                    client = boto3.client('cognito-identity', region_name=region)
+                    identity_id = client.get_id(IdentityPoolId=identity_pool_id)
+                    identity_id = identity_id['IdentityId'].encode('utf-8')
+                except NameError:
+                    pass
+                except ClientError:
+                    continue
                 start = self.helpers.indexOf(response,
                                              identity_pool_id, True, 0, response_len)
                 offset[0] = start
@@ -853,7 +923,7 @@ class CognitoScan(object):
                     ScanIssue(self.request_response.getHttpService(),
                               current_url, markers, issuename, issuelevel, issuedetail)
                 )
-                identified_pool_ids.add(identity_pool_id)
+                IDENTIFIED_POOL_IDS.add(identity_pool_id)
                 if RUN_TESTS and identity_id:
                     obtain_unauth_token(identity_pool_id, identity_id, region, markers)
 
