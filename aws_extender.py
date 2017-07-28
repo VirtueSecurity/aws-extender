@@ -609,9 +609,9 @@ class BucketScan(object):
                 print 'Error Code (set_contents_from_string): ' + str(error.error_code)
 
             try:
-                bucket.add_email_grant('FULL_CONTROL', '')
+                bucket.add_email_grant('FULL_CONTROL', 0)
             except S3ResponseError as error:
-                if error.error_code == 'MalformedACLError':
+                if error.error_code == 'UnresolvableGrantByEmailAddress':
                     issues.append('FULL_CONTROL')
                 else:
                     print 'Error Code (add_email_grant): ' + str(error.error_code)
@@ -708,6 +708,9 @@ class BucketScan(object):
             key_obj = bucket.get_key(norm_key)
         except S3ResponseError:
             return
+
+        if not key_obj:
+            return
         issues.append('READ')
 
         try:
@@ -719,11 +722,9 @@ class BucketScan(object):
             pass
 
         try:
-            key_obj.add_email_grant('FULL_CONTROL', '')
+            key_obj.add_email_grant('FULL_CONTROL', 0)
         except S3ResponseError as error:
-            error_code = error.error_code
-            if error_code == 'UnresolvableGrantByEmailAddress' or\
-                error_code == 'MalformedACLError':
+            if error.error_code == 'UnresolvableGrantByEmailAddress':
                 issues.append('s3:PutObjectAcl')
         except AttributeError as error:
             if error.message.startswith("'Policy'"):
