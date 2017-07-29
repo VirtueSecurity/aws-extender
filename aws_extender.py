@@ -33,11 +33,7 @@ from java.awt import BorderLayout
 from java.awt import GridLayout
 from org.xml.sax import SAXException
 
-IDENTIFIED_S3_BUCKETS = set()
-IDENTIFIED_GS_BUCKETS = set()
-IDENTIFIED_AZ_BUCKETS = set()
-IDENTIFIED_POOL_IDS = set()
-TESTED_URIS = set()
+IDENTIFIED_VALUES = set()
 
 
 class BurpExtender(IBurpExtender, IScannerCheck, ITab):
@@ -295,7 +291,9 @@ class BucketScan(object):
                 return False
         elif bucket_type == 'Azure':
             try:
-                if not re.search(r'^\w://', bucket_name):
+                if re.search(r'^\w+://', bucket_name):
+                    bucket_url = bucket_name
+                else:
                     bucket_url = 'https://' + bucket_name
                 bucket_url += '?comp=list&maxresults=10'
                 urllib2.urlopen(urllib2.Request(bucket_url), timeout=20)
@@ -622,7 +620,9 @@ class BucketScan(object):
                     raise
         elif bucket_type == 'Azure':
             try:
-                if not re.search(r'^\w://', bucket_name):
+                if re.search(r'^\w+://', bucket_name):
+                    bucket_url = bucket_name
+                else:
                     bucket_url = 'https://' + bucket_name
                 bucket_url += '?comp=list&maxresults=10'
                 request = urllib2.Request(bucket_url)
@@ -655,6 +655,7 @@ class BucketScan(object):
 
     def check_timestamp(self, bucket_url, bucket_type, timestamp):
         """Check timestamps of signed URLs."""
+        timestamp_raw = timestamp
         offsets = []
         mark_request = True
         start = 0
@@ -669,17 +670,17 @@ class BucketScan(object):
 
         if diff > 24:
             start = self.helpers.indexOf(self.response,
-                                         timestamp, True, 0, self.response_len)
+                                         timestamp_raw, True, 0, self.response_len)
             if start < 0:
                 start = self.helpers.indexOf(self.request,
-                                             timestamp, True, 0, self.request_len)
+                                             timestamp_raw, True, 0, self.request_len)
                 mark_request = True
             if mark_request:
                 markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
             else:
                 markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
             self.offset[0] = start
-            self.offset[1] = start + len(timestamp)
+            self.offset[1] = start + len(timestamp_raw)
             offsets.append(self.offset)
             issuename = '%s Signed URL Excessive Expiration Time' % bucket_type
             issuelevel = 'Information'
@@ -811,29 +812,24 @@ class BucketScan(object):
                 bucket_url = bucket_match[0]
                 bucket_name = bucket_match[1] or bucket_match[2]
                 timestamp = bucket_match[-1]
+                bucket_tuple = (bucket_name, host)
+                timestamp_tuple = (timestamp, bucket_url, host)
                 if RUN_TESTS and not self.bucket_exists(bucket_name, bucket_type):
                     continue
                 try:
                     key = bucket_match[3]
-                    if RUN_TESTS and key and bucket_url not in TESTED_URIS:
+                    key_tuple = (key, bucket_url, host)
+                    if key and key_tuple not in IDENTIFIED_VALUES and RUN_TESTS:
                         self.test_object(bucket_name, bucket_type, key)
+                    IDENTIFIED_VALUES.add(key_tuple)
                 except IndexError:
                     pass
-                if timestamp and bucket_url not in TESTED_URIS:
+                if timestamp and timestamp_tuple not in IDENTIFIED_VALUES:
                     self.check_timestamp(bucket_url, bucket_type, timestamp)
-                    TESTED_URIS.add(bucket_url)
-                if bucket_type == 'S3':
-                    if bucket_name in IDENTIFIED_S3_BUCKETS and host in TESTED_URIS:
-                        continue
-                    IDENTIFIED_S3_BUCKETS.add(bucket_name)
-                elif bucket_type == 'GS':
-                    if bucket_name in IDENTIFIED_GS_BUCKETS and host in TESTED_URIS:
-                        continue
-                    IDENTIFIED_GS_BUCKETS.add(bucket_name)
-                elif bucket_type == 'Azure':
-                    if bucket_name in IDENTIFIED_AZ_BUCKETS and host in TESTED_URIS:
-                        continue
-                    IDENTIFIED_AZ_BUCKETS.add(bucket_name)
+                IDENTIFIED_VALUES.add(timestamp_tuple)
+                if bucket_tuple in IDENTIFIED_VALUES:
+                    continue
+                IDENTIFIED_VALUES.add(bucket_tuple)
                 start = self.helpers.indexOf(self.response,
                                              bucket_name, True, 0, self.response_len)
                 if start < 0:
@@ -864,7 +860,6 @@ class BucketScan(object):
                                       markers, issues['issuename'], issues['issuelevel'], issues['issuedetail']
                                      )
                         )
-                TESTED_URIS.add(host)
 
         if s3_bucket_matches:
             assess_buckets(s3_bucket_matches, 'S3')
@@ -884,7 +879,26 @@ class CognitoScan(object):
         self.request_response = request_response
         self.callbacks = callbacks
         self.helpers = self.callbacks.getHelpers()
+        self.current_url = self.helpers.analyzeRequest(self.request_response).getUrl()
         self.scan_issues = []
+
+    def obtain_unauth_token(self, identity_pool_id, identity_id, region, markers):
+        """Obtain an unauthenticated identity token."""
+        client = boto3.client('cognito-identity', region_name=region)
+        try:
+            token = client.get_open_id_token(IdentityId=identity_id)['Token']
+        except (ClientError, KeyError):
+            return
+        issuename = 'Cognito Unauthenticated Identities Enabled'
+        issuelevel = 'Information'
+        issuedetail = '''The following identity pool allows unauthenticated identities:
+            <br><ul><li>%s</li></ul><br>The following identity ID has been obtained:
+            <ul><li>%s</li></ul><br>The following token has been obtained:
+            <ul><li>%s</li></ul>''' % (identity_pool_id, identity_id, token)
+        self.scan_issues.append(
+            ScanIssue(self.request_response.getHttpService(),
+                      self.current_url, markers, issuename, issuelevel, issuedetail)
+        )
 
     def identify_identity_pools(self):
         """Identify Cognito identity pools."""
@@ -892,40 +906,23 @@ class CognitoScan(object):
         response_str = self.helpers.bytesToString(response)
         response_len = len(response_str)
         response_str = response_str.encode('utf-8', 'replace')
-        current_url = self.helpers.analyzeRequest(self.request_response).getUrl()
         identity_pool_regex = re.compile(
             r'((us-[\w-]+):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})',
             re.I)
         identity_pools = re.findall(identity_pool_regex, response_str)
-        offset = array('i', [0, 0])
-
-        def obtain_unauth_token(identity_pool_id, identity_id, region, markers):
-            """Obtain an unauthenticated identity token."""
-            client = boto3.client('cognito-identity', region_name=region)
-            try:
-                token = client.get_open_id_token(IdentityId=identity_id)['Token']
-            except (ClientError, KeyError):
-                return
-            issuename = 'Cognito Unauthenticated Identities Enabled'
-            issuelevel = 'Information'
-            issuedetail = '''The following identity pool allows unauthenticated identities:
-                <br><ul><li>%s</li></ul><br>The following identity ID has been obtained:
-                <ul><li>%s</li></ul><br>The following token has been obtained:
-                <ul><li>%s</li></ul>''' % (identity_pool_id, identity_id, token)
-            self.scan_issues.append(
-                ScanIssue(self.request_response.getHttpService(),
-                          current_url, markers, issuename, issuelevel, issuedetail)
-            )
 
         def verify_identity_pools(identity_pool_ids):
             """Verify identity pools."""
+            offset = array('i', [0, 0])
+            host = re.search(r'\w+://([\w.-]+)', str(self.current_url)).group(1)
             for i in xrange(0, len(identity_pool_ids)):
                 offsets = []
                 identity_id = ''
                 identity_pool_id = identity_pool_ids[i]
                 region = identity_pool_id[1]
                 identity_pool_id = identity_pool_id[0]
-                if identity_pool_id in IDENTIFIED_POOL_IDS:
+                identity_pool_tuple = (identity_pool_id, host)
+                if identity_pool_id and identity_pool_tuple not in IDENTIFIED_VALUES:
                     continue
                 try:
                     client = boto3.client('cognito-identity', region_name=region)
@@ -947,11 +944,11 @@ class CognitoScan(object):
                     <li>%s</li>''' % identity_pool_id
                 self.scan_issues.append(
                     ScanIssue(self.request_response.getHttpService(),
-                              current_url, markers, issuename, issuelevel, issuedetail)
+                              self.current_url, markers, issuename, issuelevel, issuedetail)
                 )
-                IDENTIFIED_POOL_IDS.add(identity_pool_id)
-                if RUN_TESTS and identity_id:
-                    obtain_unauth_token(identity_pool_id, identity_id, region, markers)
+                IDENTIFIED_VALUES.add(identity_pool_tuple)
+                if identity_id and RUN_TESTS:
+                    self.obtain_unauth_token(identity_pool_id, identity_id, region, markers)
 
         if identity_pools:
             verify_identity_pools(identity_pools)
