@@ -235,12 +235,13 @@ class BucketScan(object):
         self.request_response = request_response
         self.callbacks = callbacks
         self.helpers = self.callbacks.getHelpers()
+        bytesToString = self.helpers.bytesToString
         self.request = self.request_response.getRequest()
-        self.request_str = self.helpers.bytesToString(self.request)
+        self.request_str = bytesToString(self.request)
         self.request_len = len(self.request_str)
         self.request_str = self.request_str.encode('utf-8', 'replace')
         self.response = self.request_response.getResponse()
-        self.response_str = self.helpers.bytesToString(self.response)
+        self.response_str = bytesToString(self.response)
         self.response_len = len(self.response_str)
         self.response_str = self.response_str.encode('utf-8', 'replace')
         self.offset = array('i', [0, 0])
@@ -291,11 +292,7 @@ class BucketScan(object):
                 return False
         elif bucket_type == 'Azure':
             try:
-                if re.search(r'^\w+://', bucket_name):
-                    bucket_url = bucket_name
-                else:
-                    bucket_url = 'https://' + bucket_name
-                bucket_url += '?comp=list&maxresults=10'
+                bucket_url = 'https://' + bucket_name + '?comp=list&maxresults=10'
                 urllib2.urlopen(urllib2.Request(bucket_url), timeout=20)
             except (urllib2.HTTPError, urllib2.URLError):
                 return False
@@ -312,7 +309,8 @@ class BucketScan(object):
             try:
                 bucket_acl = bucket.get_acl().acl
                 for grant in bucket_acl.grants:
-                    grants.append((grant.display_name or grant.uri) + '->' + grant.permission)
+                    grants.append((grant.display_name or grant.uri or grant.id) + '->' +
+                                  grant.permission)
                 issues.append('s3:GetBucketAcl<ul><li>%s</li></ul>' % '</li><li>'.join(grants))
             except S3ResponseError as error:
                 print 'Error Code (get_bucket_acl): ' + str(error.error_code)
@@ -620,11 +618,7 @@ class BucketScan(object):
                     raise
         elif bucket_type == 'Azure':
             try:
-                if re.search(r'^\w+://', bucket_name):
-                    bucket_url = bucket_name
-                else:
-                    bucket_url = 'https://' + bucket_name
-                bucket_url += '?comp=list&maxresults=10'
+                bucket_url = 'https://' + bucket_name + '?comp=list&maxresults=10'
                 request = urllib2.Request(bucket_url)
                 response = urllib2.urlopen(request, timeout=20)
                 blobs = parse(response).documentElement.getElementsByTagName('Name')
@@ -657,7 +651,7 @@ class BucketScan(object):
         """Check timestamps of signed URLs."""
         timestamp_raw = timestamp
         offsets = []
-        mark_request = True
+        mark_request = False
         start = 0
 
         if bucket_type != 'Azure':
@@ -675,13 +669,13 @@ class BucketScan(object):
                 start = self.helpers.indexOf(self.request,
                                              timestamp_raw, True, 0, self.request_len)
                 mark_request = True
+            self.offset[0] = start
+            self.offset[1] = start + len(timestamp_raw)
+            offsets.append(self.offset)
             if mark_request:
                 markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
             else:
                 markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
-            self.offset[0] = start
-            self.offset[1] = start + len(timestamp_raw)
-            offsets.append(self.offset)
             issuename = '%s Signed URL Excessive Expiration Time' % bucket_type
             issuelevel = 'Information'
             issuedetail = '''The following %s signed URL was found to be valid for more than
@@ -717,7 +711,8 @@ class BucketScan(object):
         try:
             key_acl = key_obj.get_acl().acl
             for grant in key_acl.grants:
-                grants.append((grant.display_name or grant.uri) + '->' + grant.permission)
+                grants.append((grant.display_name or grant.uri or grant.id) + '->' +
+                              grant.permission)
             issues.append('s3:GetObjectAcl<ul><li>%s</li></ul>' % '</li><li>'.join(grants))
         except S3ResponseError:
             pass
@@ -793,7 +788,7 @@ class BucketScan(object):
 
         # Matches Azure container URIs
         az_buckets_regex = re.compile(
-            r'(((?:\w+://)?[\w.-]+\.blob\.core\.windows\.net(?::\d+)?\\?/[\w.-]+)(?:.*?\?.*se=([\w%-]+))?)',
+            r'(([\w.-]+\.blob\.core\.windows\.net(?::\d+)?\\?/[\w.-]+)(?:.*?\?.*se=([\w%-]+))?)',
             re.I)
         az_bucket_matches = re.findall(az_buckets_regex, current_url_str)
         az_bucket_matches += re.findall(az_buckets_regex, self.request_str)
@@ -902,14 +897,20 @@ class CognitoScan(object):
 
     def identify_identity_pools(self):
         """Identify Cognito identity pools."""
+        bytesToString = self.helpers.bytesToString
+        request = self.request_response.getRequest()
+        request_str = bytesToString(request)
+        request_len = len(request_str)
+        request_str = request_str.encode('utf-8', 'replace')
         response = self.request_response.getResponse()
-        response_str = self.helpers.bytesToString(response)
+        response_str = bytesToString(response)
         response_len = len(response_str)
         response_str = response_str.encode('utf-8', 'replace')
         identity_pool_regex = re.compile(
             r'((us-[\w-]+):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})',
             re.I)
-        identity_pools = re.findall(identity_pool_regex, response_str)
+        identity_pools = re.findall(identity_pool_regex, request_str)
+        identity_pools += re.findall(identity_pool_regex, response_str)
 
         def verify_identity_pools(identity_pool_ids):
             """Verify identity pools."""
@@ -918,11 +919,12 @@ class CognitoScan(object):
             for i in xrange(0, len(identity_pool_ids)):
                 offsets = []
                 identity_id = ''
+                mark_request = False
                 identity_pool_id = identity_pool_ids[i]
                 region = identity_pool_id[1]
                 identity_pool_id = identity_pool_id[0]
                 identity_pool_tuple = (identity_pool_id, host)
-                if identity_pool_id and identity_pool_tuple not in IDENTIFIED_VALUES:
+                if identity_pool_id and identity_pool_tuple in IDENTIFIED_VALUES:
                     continue
                 try:
                     client = boto3.client('cognito-identity', region_name=region)
@@ -934,10 +936,17 @@ class CognitoScan(object):
                     continue
                 start = self.helpers.indexOf(response,
                                              identity_pool_id, True, 0, response_len)
+                if start < 0:
+                    start = self.helpers.indexOf(request,
+                                                 identity_pool_id, True, 0, request_len)
+                    mark_request = True
                 offset[0] = start
                 offset[1] = start + len(identity_pool_id)
                 offsets.append(offset)
-                markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
+                if mark_request:
+                    markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
+                else:
+                    markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
                 issuename = 'Cognito Identity Pool Detected'
                 issuelevel = 'Information'
                 issuedetail = '''The following identity pool ID has been identified:<br>
