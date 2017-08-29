@@ -193,8 +193,6 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
             save_setting('passive_mode', '')
 
         if wordlist_path and not os.path.isfile(wordlist_path):
-            print type(wordlist_path)
-            print wordlist_path
             error_message = 'Error: Invalid filepath for the "Wordlist Filepath" setting.'
             self.show_errors(error_message)
 
@@ -354,7 +352,7 @@ class BucketScan(object):
                     wordlist_keys = wordlist.read()
                     key_list = wordlist_keys.split('\n')
             except IOError:
-                pass
+                return
 
             if bucket_type != 'Azure':
                 for key in key_list:
@@ -368,7 +366,7 @@ class BucketScan(object):
                 for key in key_list:
                     try:
                         request = urllib2.Request(bucket + key)
-                        response = urllib2.urlopen(request, timeout=20)
+                        urllib2.urlopen(request, timeout=20)
                         keys.append(key)
                     except (urllib2.HTTPError, urllib2.URLError):
                         continue
@@ -487,10 +485,10 @@ class BucketScan(object):
                 self.boto3_client.put_bucket_lifecycle_configuration(
                     Bucket=bucket_name,
                     LifecycleConfiguration={
-                        "Rules": [
+                        'Rules': [
                             {
-                                "Status": "Disabled",
-                                "Prefix": "test"
+                                'Status': 'Disabled',
+                                'Prefix': 'test'
                             }
                         ]
                     }
