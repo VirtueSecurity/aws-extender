@@ -1,6 +1,6 @@
 # AWS Extender
 
-AWS Extender is a [BurpSuite](https://portswigger.net/burp/) extension to identify and test S3 buckets as well as Google Storage buckets and Azure containers for common misconfiguration issues using the boto/boto3 SDK library.
+AWS Extender is a [BurpSuite](https://portswigger.net/burp/) extension to identify and test S3 buckets as well as Google Storage buckets and Azure Storage containers for common misconfiguration issues using the boto/boto3 SDK library.
 
 
 ## Getting Started
