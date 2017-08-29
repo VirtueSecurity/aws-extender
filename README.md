@@ -1,56 +1,50 @@
 # AWS Extender
 
-AWS Extender is a [Burpsuite](https://portswigger.net/burp/) plugin to identify and test AWS assets for common misconfigurations. Many AWS services such as S3 expose an attack surface not accessible directly over HTTP/HTTPS. AWS Extender uses the AWS SDK Boto3 to connect to S3 buckets and test for misconfigurations.
+AWS Extender is a [BurpSuite](https://portswigger.net/burp/) extension to identify and test S3 buckets as well as Google Storage buckets and Azure containers for common misconfiguration issues using the boto/boto3 SDK library.
 
 
 ## Getting Started
-##### For general instructions on how to load Burp Suite plugins, please visit this [URL](https://support.portswigger.net/customer/portal/articles/1965930-how-to-install-an-extension-in-burp-suite).
+##### For general instructions on how to load BurpSuite extensions, please visit this [URL](https://support.portswigger.net/customer/portal/articles/1965930-how-to-install-an-extension-in-burp-suite).
 
 #### Installing Dependency Libraries
 1. Download the file "[requirements.txt](/requirements.txt)".
-1. Run the following command `pip install -r requirements.txt`.
+2. Run the following command `pip install -r requirements.txt`.
 
 #### Custom Environment Settings
-1. Open the Burp Suite Extender tab.
+1. Open the BurpSuite Extender tab.
 2. Click "Options".
 3. Set the "Folder for loading modules" setting to the path of your Python installation's [site-packages directory](https://docs.python.org/2/install/#how-installation-works).
 
-#### Config Options
-In order to make full use of AWS Extender, you will need an AWS access key as well as a secret key. if you don't have an account, one can be obtained for free at "[https://aws.amazon.com/free/](https://aws.amazon.com/free/)".
+#### Extension Settings
+The settings tab provides the following settings:
 
-After obtaining your AWS credentials, you will need to add them through the "AWS Extender" tab as shown below:
-<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/config-tab.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/config-tab-thumb.png?raw=true" alt="Congig Tab"></a>
+<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/settings.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/settings_thumb.png?raw=true" alt="Settings Tab"></a>
 
-## Tests Covered
+Below is a description of each:
 
-### S3
+| Setting   |      Description      |      Required      |
+|----------|:-------------:|:-------------:|
+| AWS Access Key |  Your AWS account access key ID |  True |
+| AWS Secret Key |    Your AWS account secret key   |    True   |
+| AWS Session Key | A temporary session token | False |
+| GS Access Key | Your Google account access key ID | True |
+| GS Secret Key | Your Google account secret key | True |
+| Wordlist Filepath | A filepath to a list of filenames | False |
+| Passive Mode | Perform passive checks only | N/A |
 
- - List Bucket (s3:ListBucket)
- - List Multipart Uploads (s3:ListMultipartUploadParts)
- - Get Bucket ACL (s3:GetBucketAcl)
- - Set Bucket ACL (s3:PutBucketAcl)
- - Upload File (s3:PutObject)
- - Get Bucket Event Notifications (s3:GetBucketNotification)
- - Set Bucket Event Notifications (s3:PutBucketNotification)
- - Get Bucket Policy (s3:GetBucketPolicy)
- - Set Bucket Policy (s3:PutBucketPolicy)
- - Get Bucket Tagging (s3:GetBucketTagging)
- - Set Bucket Tagging (s3:PutBucketTagging)
- - Get Bucket Website (s3:GetBucketWebsite)
- - Set Bucket Website (s3:PutBucketWebsite)
- - Get Bucket CORS (s3:GetBucketCORS)
- - Set Bucket CORS (s3:PutBucketCORS)
- - GET Life Cycle Configuration (s3:GetLifecycleConfiguration)
- - Set Life Cycle Configuration (s3:PutLifecycleConfiguration)
- - Set Bucket Logging (s3:PutBucketLogging)
+**Notes:**
+* AWS keys can be obtained from your [AWS Management Console](https://console.aws.amazon.com/iam/home?#/security_credential). For Google Cloud, see [the documentation](https://cloud.google.com/storage/docs/migrating#keys).
+
+* The extension will still provide minimal functionality (e.g., identifying buckets) even if none of the above requirements are satisfied.
+
 
 ## Screenshots
-<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket_identified.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket_identified.png?raw=true" alt="Bucket Identified"></a>
+<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/S3_bucket_misconfiguration.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/S3_bucket_misconfiguration.png?raw=true" alt="S3 Bucket Misconfiguration"></a>
 
-<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket-readable.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/bucket-readable.png?raw=true" alt="Bucket Readable"></a>
+<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/excessive_signed_url.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/excessive_signed_url.png?raw=true" alt="S3 Signed URL Excessive Expiration Time"></a>
 
-## Todo
-* Cover more AWS services.
-* Add more tests.
-* Show tests output.
-* Add an import option for bucket names.
+<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/GS_bucket_misconfiguration.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/GS_bucket_misconfiguration.png?raw=true" alt="GS Bucket Misconfiguration"></a>
+
+
+## License
+todo

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-# Version 0.9
+# Version 1.0
 import re
 import time
 import urllib
 import urllib2
+import os.path
 import xml.etree.cElementTree as CET
 from xml.dom.minidom import parse
 from array import array
@@ -28,6 +29,7 @@ from javax.swing import JLabel
 from javax.swing import JFrame
 from javax.swing import JPanel
 from javax.swing import JButton
+from javax.swing import JCheckBox
 from javax.swing.border import EmptyBorder
 from java.awt import BorderLayout
 from java.awt import GridLayout
@@ -46,11 +48,14 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         self.aws_session_token_inpt = None
         self.gs_access_key_inpt = None
         self.gs_secret_key_inpt = None
+        self.wordlist_path_inpt = None
+        self.checkbox_inpt = None
         self.aws_access_key = ''
         self.aws_secret_key = ''
         self.aws_session_token = ''
         self.gs_access_key = ''
         self.gs_secret_key = ''
+        self.wordlist_path = ''
 
     def registerExtenderCallbacks(self, callbacks):
         """Register extender callbacks."""
@@ -67,11 +72,23 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
 
         callbacks.customizeUiComponent(self.gui_elements)
         callbacks.addSuiteTab(self)
+        self.check_loading_issues()
         self.reload_config()
-        self.show_errors()
 
-    def show_errors(self):
-        """Display loading errors."""
+    def show_errors(self, label):
+        """Display error messages."""
+        top_label = JLabel(label, JLabel.CENTER)
+
+        frame = JFrame(self.ext_name)
+        frame.setSize(550, 300)
+        frame.setLayout(GridLayout(1, 1))
+
+        frame.add(top_label)
+        frame.setLocationRelativeTo(None)
+        frame.setVisible(True)
+
+    def check_loading_issues(self):
+        """Check for any loading issues."""
         missing_libs = []
         tips = []
         label = """<html>
@@ -114,81 +131,104 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
 
         if not missing_libs:
             return
-
         label %= ('</li><li>'.join(missing_libs), '</li><li>'.join(tips))
-        top_label = JLabel(label, JLabel.CENTER)
 
-        frame = JFrame(self.ext_name)
-        frame.setSize(550, 300)
-        frame.setLayout(GridLayout(1, 1))
-
-        frame.add(top_label)
-        frame.setLocationRelativeTo(None)
-        frame.setVisible(True)
+        self.show_errors(label)
 
     def build_gui(self):
         """Construct GUI elements."""
-        creds_panel = JPanel(BorderLayout(3, 3))
-        creds_panel.setBorder(EmptyBorder(200, 200, 200, 200))
+        panel = JPanel(BorderLayout(3, 3))
+        panel.setBorder(EmptyBorder(160, 160, 160, 160))
 
         self.aws_access_key_inpt = JTextField(10)
         self.aws_secret_key_inpt = JTextField(10)
         self.aws_session_token_inpt = JTextField(10)
         self.gs_access_key_inpt = JTextField(10)
         self.gs_secret_key_inpt = JTextField(10)
+        self.wordlist_path_inpt = JTextField(10)
+        self.checkbox_inpt = JCheckBox('Enabled')
+
         save_btn = JButton('Save', actionPerformed=self.save_config)
 
         labels = JPanel(GridLayout(0, 1))
         inputs = JPanel(GridLayout(0, 1))
-        creds_panel.add(labels, BorderLayout.WEST)
-        creds_panel.add(inputs, BorderLayout.CENTER)
+        panel.add(labels, BorderLayout.WEST)
+        panel.add(inputs, BorderLayout.CENTER)
 
-        top_label = JLabel('<html><b>Account Credentials</b><br><br></html>')
+        top_label = JLabel('<html><b>Settings</b><br><br></html>')
         top_label.setHorizontalAlignment(JLabel.CENTER)
-        creds_panel.add(top_label, BorderLayout.NORTH)
-        labels.add(JLabel('AWS Access Key: '))
+        panel.add(top_label, BorderLayout.NORTH)
+        labels.add(JLabel('AWS Access Key:'))
         inputs.add(self.aws_access_key_inpt)
-        labels.add(JLabel('AWS Secret Key: '))
+        labels.add(JLabel('AWS Secret Key:'))
         inputs.add(self.aws_secret_key_inpt)
-        labels.add(JLabel('AWS Session Key (optional): '))
+        labels.add(JLabel('AWS Session Key (optional):'))
         inputs.add(self.aws_session_token_inpt)
-        labels.add(JLabel('GS Access Key: '))
+        labels.add(JLabel('GS Access Key:'))
         inputs.add(self.gs_access_key_inpt)
-        labels.add(JLabel('GS Secret Key: '))
+        labels.add(JLabel('GS Secret Key:'))
         inputs.add(self.gs_secret_key_inpt)
-        creds_panel.add(save_btn, BorderLayout.SOUTH)
-        return creds_panel
+        labels.add(JLabel('Wordlist Filepath (optional):'))
+        inputs.add(self.wordlist_path_inpt)
+        labels.add(JLabel('Passive Mode:'))
+        inputs.add(self.checkbox_inpt)
+        panel.add(save_btn, BorderLayout.SOUTH)
+        return panel
 
     def save_config(self, _):
         """Save settings."""
+        error_message = ''
+        wordlist_path = self.wordlist_path_inpt.getText()
         save_setting = self.callbacks.saveExtensionSetting
         save_setting('aws_access_key', self.aws_access_key_inpt.getText())
         save_setting('aws_secret_key', self.aws_secret_key_inpt.getText())
         save_setting('aws_session_token', self.aws_session_token_inpt.getText())
         save_setting('gs_access_key', self.gs_access_key_inpt.getText())
         save_setting('gs_secret_key', self.gs_secret_key_inpt.getText())
+        save_setting('wordlist_path', wordlist_path)
+
+        if self.checkbox_inpt.isSelected():
+            save_setting('passive_mode', 'True')
+        else:
+            save_setting('passive_mode', '')
+
+        if wordlist_path and not os.path.isfile(wordlist_path):
+            print type(wordlist_path)
+            print wordlist_path
+            error_message = 'Error: Invalid filepath for the "Wordlist Filepath" setting.'
+            self.show_errors(error_message)
 
         self.reload_config()
 
     def reload_config(self):
         """Reload saved settings."""
+        global RUN_TESTS
         load_setting = self.callbacks.loadExtensionSetting
         aws_access_key_val = load_setting('aws_access_key')
         aws_secret_key_val = load_setting('aws_secret_key')
         aws_session_token_val = load_setting('aws_session_token')
         gs_access_key_val = load_setting('gs_access_key')
         gs_secret_key_val = load_setting('gs_secret_key')
+        wordlist_path_val = load_setting('wordlist_path')
+        checkbox_inpt_val = bool(str(load_setting('passive_mode')))
+        if checkbox_inpt_val:
+            RUN_TESTS = False
+        else:
+            RUN_TESTS = True
 
         self.aws_access_key = aws_access_key_val
         self.aws_secret_key = aws_secret_key_val
         self.aws_session_token = aws_session_token_val
         self.gs_access_key = gs_access_key_val
         self.gs_secret_key = gs_secret_key_val
+        self.wordlist_path = wordlist_path_val
         self.aws_access_key_inpt.setText(aws_access_key_val)
         self.aws_secret_key_inpt.setText(aws_secret_key_val)
         self.aws_session_token_inpt.setText(aws_session_token_val)
         self.gs_access_key_inpt.setText(gs_access_key_val)
         self.gs_secret_key_inpt.setText(gs_secret_key_val)
+        self.wordlist_path_inpt.setText(wordlist_path_val)
+        self.checkbox_inpt.setSelected(checkbox_inpt_val)
 
     def getTabCaption(self):
         """Return tab caption."""
@@ -201,12 +241,13 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
     def doPassiveScan(self, request_response):
         """Perform a passive scan."""
         scan_issues = []
-        keys = {'aws_access_key': self.aws_access_key,
+        opts = {'aws_access_key': self.aws_access_key,
                 'aws_secret_key': self.aws_secret_key,
                 'aws_session_token': self.aws_session_token,
                 'gs_access_key': self.gs_access_key,
-                'gs_secret_key': self.gs_secret_key}
-        bucket_scan = BucketScan(request_response, self.callbacks, keys)
+                'gs_secret_key': self.gs_secret_key,
+                'wordlist_path': self.wordlist_path}
+        bucket_scan = BucketScan(request_response, self.callbacks, opts)
         bucket_issues = bucket_scan.check_buckets()
         cognito_scan = CognitoScan(request_response, self.callbacks)
         cognito_issues = cognito_scan.identify_identity_pools()
@@ -231,7 +272,7 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
 
 class BucketScan(object):
     """Scan cloud storage buckets."""
-    def __init__(self, request_response, callbacks, keys):
+    def __init__(self, request_response, callbacks, opts):
         self.request_response = request_response
         self.callbacks = callbacks
         self.helpers = self.callbacks.getHelpers()
@@ -247,11 +288,12 @@ class BucketScan(object):
         self.offset = array('i', [0, 0])
         self.current_url = self.helpers.analyzeRequest(self.request_response).getUrl()
         self.scan_issues = []
-        self.aws_access_key = keys['aws_access_key']
-        self.aws_secret_key = keys['aws_secret_key']
-        self.aws_session_token = keys['aws_session_token']
-        self.gs_access_key = keys['gs_access_key']
-        self.gs_secret_key = keys['gs_secret_key']
+        self.aws_access_key = opts['aws_access_key']
+        self.aws_secret_key = opts['aws_secret_key']
+        self.aws_session_token = opts['aws_session_token']
+        self.gs_access_key = opts['gs_access_key']
+        self.gs_secret_key = opts['gs_secret_key']
+        self.wordlist_path = opts['wordlist_path']
         try:
             self.boto3_client = boto3.client('s3',
                                              aws_access_key_id=self.aws_access_key,
@@ -295,7 +337,8 @@ class BucketScan(object):
                 bucket_url = 'https://' + bucket_name + '?comp=list&maxresults=10'
                 urllib2.urlopen(urllib2.Request(bucket_url), timeout=20)
             except (urllib2.HTTPError, urllib2.URLError):
-                return False
+                if not self.wordlist_path:
+                    return False
         return True
 
     def test_bucket(self, bucket_name, bucket_type):
@@ -303,6 +346,32 @@ class BucketScan(object):
         grants = []
         issues = []
         keys = []
+
+        def enumerate_keys(bucket, bucket_name, bucket_type):
+            """Enumerate bucket keys."""
+            try:
+                with open(self.wordlist_path) as wordlist:
+                    wordlist_keys = wordlist.read()
+                    key_list = wordlist_keys.split('\n')
+            except IOError:
+                pass
+
+            if bucket_type != 'Azure':
+                for key in key_list:
+                    try:
+                        key = bucket.get_key(key).key
+                        self.test_object(bucket_name, bucket_type, key, False)
+                    except S3ResponseError:
+                        continue
+            else:
+                bucket = bucket if bucket.endswith('/') else bucket + '/'
+                for key in key_list:
+                    try:
+                        request = urllib2.Request(bucket + key)
+                        response = urllib2.urlopen(request, timeout=20)
+                        keys.append(key)
+                    except (urllib2.HTTPError, urllib2.URLError):
+                        continue
 
         if bucket_type == 'S3':
             bucket = self.boto_s3_con.get_bucket(bucket_name, validate=False)
@@ -388,6 +457,8 @@ class BucketScan(object):
                 issues.append('s3:ListBucket<ul><li>%s</li></ul>' % '</li><li>'.join(keys))
             except S3ResponseError as error:
                 print 'Error Code (list): ' + str(error.error_code)
+                if self.wordlist_path:
+                    enumerate_keys(bucket, bucket_name, 'S3')
 
             try:
                 self.boto3_client.put_bucket_cors(
@@ -395,16 +466,12 @@ class BucketScan(object):
                     CORSConfiguration={
                         'CORSRules': [
                             {
-                                'ExposeHeaders': [
-                                    'Authorization',
-                                ],
                                 'AllowedMethods': [
                                     'GET',
                                 ],
                                 'AllowedOrigins': [
                                     '*',
-                                ],
-                                'MaxAgeSeconds': 123
+                                ]
                             }
                         ]
                     }
@@ -420,32 +487,10 @@ class BucketScan(object):
                 self.boto3_client.put_bucket_lifecycle_configuration(
                     Bucket=bucket_name,
                     LifecycleConfiguration={
-                        'Rules': [
+                        "Rules": [
                             {
-                                'Expiration': {
-                                    'Date': datetime(2015, 1, 1),
-                                    'Days': 123,
-                                    'ExpiredObjectDeleteMarker': True|False
-                                },
-                                'ID': 'test',
-                                'Prefix': 'test',
-                                'Filter': {
-                                    'Prefix': 'test',
-                                    'Tag': {
-                                        'Key': 'test',
-                                        'Value': 'test'
-                                    },
-                                    'And': {
-                                        'Prefix': 'test',
-                                        'Tags': [
-                                            {
-                                                'Key': 'test',
-                                                'Value': 'test'
-                                            },
-                                        ]
-                                    }
-                                },
-                                'Status': 'Enabled'
+                                "Status": "Disabled",
+                                "Prefix": "test"
                             }
                         ]
                     }
@@ -474,12 +519,8 @@ class BucketScan(object):
                     Bucket=bucket_name,
                     NotificationConfiguration={
                         'TopicConfiguration': {
-                            'Id': 'string',
-                            'Events': [
-                                's3:ReducedRedundancyLostObject',
-                            ],
-                            'Event': 's3:ReducedRedundancyLostObject',
-                            'Topic': 'test'
+                            'Events': ['s3:ReducedRedundancyLostObject'],
+                            'Topic': 'arn:aws:sns:us-west-2:444455556666:sns-topic-one'
                         }
                     }
                 )
@@ -542,36 +583,44 @@ class BucketScan(object):
             except ResponseParserError:
                 issues.append('s3:PutObject')
 
-            try:
-                self.boto3_client.put_bucket_acl(
-                    GrantFullControl='uri="http://acs.amazonaws.com/groups/global/AllUsers"',
-                    Bucket=bucket_name
-                )
-                issues.append('s3:PutBucketAcl')
-            except ClientError as error:
-                error_code = error.response['Error']['Code']
-                print 'Error Code (put_bucket_acl): ' + str(error_code)
-            except ResponseParserError:
-                issues.append('s3:PutBucketAcl')
+            if '.' in bucket_name:
+                try:
+                    self.boto3_client.put_bucket_acl(
+                        GrantFullControl='uri="http://acs.amazonaws.com/groups/global/AllUsers"',
+                        Bucket=bucket_name
+                    )
+                    issues.append('s3:PutBucketAcl')
+                except ClientError as error:
+                    error_code = error.response['Error']['Code']
+                    print 'Error Code (put_bucket_acl): ' + str(error_code)
+                except ResponseParserError:
+                    issues.append('s3:PutBucketAcl')
+            else:
+                try:
+                    bucket.add_email_grant('FULL_CONTROL', 0)
+                except S3ResponseError as error:
+                    if error.error_code == 'UnresolvableGrantByEmailAddress':
+                        issues.append('s3:PutBucketAcl')
+                except AttributeError as error:
+                    if error.message.startswith("'Policy'"):
+                        issues.append('s3:PutBucketAcl')
+                    else:
+                        raise
 
             try:
                 self.boto3_client.put_bucket_policy(
-                    Bucket='string',
+                    Bucket=bucket_name,
                     Policy='''
                         {
-                        "Version":"2008-10-17",
-                        "Id":"aaaa-bbbb-cccc-dddd",
-                        "Statement" : [
-                            {
-                                "Effect":"Allow",
-                                "Sid":"1", 
-                                "Principal" : {
-                                    "AWS":["111122223333","444455556666"]
-                                },
-                                "Action":["s3:*"],
-                                "Resource":"arn:aws:s3:::%s/*"
-                            }
-                         ]
+                            "Version":"2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect":"Allow",
+                                    "Principal": "*",
+                                    "Action":["s3:GetBucketPolicy"],
+                                    "Resource":["arn:aws:s3:::%s/*"]
+                                }
+                            ]
                         } ''' % bucket_name
                 )
                 issues.append('s3:PutBucketPolicy')
@@ -596,6 +645,9 @@ class BucketScan(object):
                 issues.append('READ<ul><li>%s</li></ul>' % '</li><li>'.join(keys))
             except S3ResponseError as error:
                 print 'Error Code (list): ' + str(error.error_code)
+                if self.wordlist_path:
+                    enumerate_keys(bucket, bucket_name, 'GS')
+
 
             try:
                 key = bucket.new_key('test.txt')
@@ -617,9 +669,9 @@ class BucketScan(object):
                 else:
                     raise
         elif bucket_type == 'Azure':
+            bucket_url = 'https://' + bucket_name
             try:
-                bucket_url = 'https://' + bucket_name + '?comp=list&maxresults=10'
-                request = urllib2.Request(bucket_url)
+                request = urllib2.Request(bucket_url + '?comp=list&maxresults=10')
                 response = urllib2.urlopen(request, timeout=20)
                 blobs = parse(response).documentElement.getElementsByTagName('Name')
                 for blob in blobs:
@@ -627,7 +679,11 @@ class BucketScan(object):
                 issues.append('Full public read access<ul><li>%s</li></ul>' %
                               '</li><li>'.join(keys))
             except (AttributeError, urllib2.HTTPError, urllib2.URLError):
-                pass
+                if self.wordlist_path:
+                    enumerate_keys(bucket_url, bucket_name, 'Azure')
+                    if keys:
+                        issues.append('Public read access for blobs only<ul><li>%s</li></ul>' %
+                                      '</li><li>'.join(keys))
 
         if not issues:
             return False
@@ -685,7 +741,7 @@ class BucketScan(object):
                           self.current_url, markers, issuename, issuelevel, issuedetail)
             )
 
-    def test_object(self, bucket_name, bucket_type, key):
+    def test_object(self, bucket_name, bucket_type, key, mark=True):
         """Test individual bucket objects."""
         issues = []
         grants = []
@@ -717,16 +773,30 @@ class BucketScan(object):
         except S3ResponseError:
             pass
 
-        try:
-            key_obj.add_email_grant('FULL_CONTROL', 0)
-        except S3ResponseError as error:
-            if error.error_code == 'UnresolvableGrantByEmailAddress':
+        if '.' in bucket_name and bucket_type == 'S3':
+            try:
+                self.boto3_client.put_object_acl(
+                    GrantFullControl='uri="http://acs.amazonaws.com/groups/global/AllUsers"',
+                    Bucket=bucket_name,
+                    Key=norm_key
+                )
                 issues.append('s3:PutObjectAcl')
-        except AttributeError as error:
-            if error.message.startswith("'Policy'"):
+            except ClientError as error:
+                error_code = error.response['Error']['Code']
+                print 'Error Code (put_object_acl): ' + str(error_code)
+            except ResponseParserError:
                 issues.append('s3:PutObjectAcl')
-            else:
-                raise
+        else:
+            try:
+                key_obj.add_email_grant('FULL_CONTROL', 0)
+            except S3ResponseError as error:
+                if error.error_code == 'UnresolvableGrantByEmailAddress':
+                    issues.append('s3:PutObjectAcl')
+            except AttributeError as error:
+                if error.message.startswith("'Policy'"):
+                    issues.append('s3:PutObjectAcl')
+                else:
+                    raise
 
         if not issues:
             return
@@ -741,7 +811,7 @@ class BucketScan(object):
         start = self.helpers.indexOf(self.response,
                                      key, True, 0, self.response_len)
 
-        if start < 0:
+        if start < 0 and mark:
             start = self.helpers.indexOf(self.request,
                                          key, True, 0, self.request_len)
             mark_request = True
@@ -752,8 +822,10 @@ class BucketScan(object):
 
         if mark_request:
             markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
-        else:
+        elif mark:
             markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
+        else:
+            markers = []
 
         if not issuename:
             issuename = '%s Object Misconfiguration' % bucket_type
@@ -768,7 +840,7 @@ class BucketScan(object):
     def check_buckets(self):
         """Check storage buckets."""
         current_url_str = str(self.current_url)
-        host = re.search(r'\w+://([\w.-]+)', current_url_str).group(1)
+        host, path = re.findall(r'\w+://([\w.-]+)(?::\d+)?(?:/([^\s?#]*))?', current_url_str)[0]
 
         # Matches S3 bucket names
         s3_buckets_regex = re.compile(
@@ -795,8 +867,8 @@ class BucketScan(object):
         az_bucket_matches += re.findall(az_buckets_regex, self.response_str)
 
         if RUN_TESTS:
-            s3_bucket_matches.append(('', host, '', ''))
-            gs_bucket_matches.append(('', host, '', ''))
+            s3_bucket_matches.append(('', host, '', path))
+            gs_bucket_matches.append(('', host, '', path))
 
         def assess_buckets(bucket_matches, bucket_type):
             """Assess identified buckets."""
