@@ -465,10 +465,10 @@ class BucketScan(object):
                         'CORSRules': [
                             {
                                 'AllowedMethods': [
-                                    'GET',
+                                    'GET'
                                 ],
                                 'AllowedOrigins': [
-                                    '*',
+                                    '*'
                                 ]
                             }
                         ]
@@ -537,7 +537,7 @@ class BucketScan(object):
                             {
                                 'Key': 'test',
                                 'Value': 'test'
-                            },
+                            }
                         ]
                     }
                 )
@@ -645,8 +645,6 @@ class BucketScan(object):
                 print 'Error Code (list): ' + str(error.error_code)
                 if self.wordlist_path:
                     enumerate_keys(bucket, bucket_name, 'GS')
-
-
             try:
                 key = bucket.new_key('test.txt')
                 key.set_contents_from_string('')
@@ -837,7 +835,7 @@ class BucketScan(object):
 
     def check_buckets(self):
         """Check storage buckets."""
-        current_url_str = str(self.current_url)
+        current_url_str = str(unicode(self.current_url, 'utf-8'))
         host, path = re.findall(r'\w+://([\w.-]+)(?::\d+)?(?:/([^\s?#]*))?', current_url_str)[0]
 
         # Matches S3 bucket names
