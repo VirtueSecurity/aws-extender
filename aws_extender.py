@@ -359,7 +359,7 @@ class BucketScan(object):
                     try:
                         key = bucket.get_key(key).key
                         self.test_object(bucket_name, bucket_type, key, False)
-                    except S3ResponseError:
+                    except (S3ResponseError, AttributeError):
                         continue
             else:
                 bucket = bucket if bucket.endswith('/') else bucket + '/'
