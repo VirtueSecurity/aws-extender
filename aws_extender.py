@@ -595,7 +595,7 @@ class BucketScan(object):
                     issues.append('s3:PutBucketAcl')
             else:
                 try:
-                    bucket.add_email_grant('FULL_CONTROL', 0)
+                    bucket.add_email_grant('FULL_CONTROL', '')
                 except S3ResponseError as error:
                     if error.error_code == 'UnresolvableGrantByEmailAddress':
                         issues.append('s3:PutBucketAcl')
