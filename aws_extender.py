@@ -202,13 +202,14 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
         """Reload saved settings."""
         global RUN_TESTS
         load_setting = self.callbacks.loadExtensionSetting
-        aws_access_key_val = load_setting('aws_access_key')
-        aws_secret_key_val = load_setting('aws_secret_key')
-        aws_session_token_val = load_setting('aws_session_token')
-        gs_access_key_val = load_setting('gs_access_key')
-        gs_secret_key_val = load_setting('gs_secret_key')
-        wordlist_path_val = load_setting('wordlist_path')
-        checkbox_inpt_val = bool(str(load_setting('passive_mode')))
+        aws_access_key_val = load_setting('aws_access_key') or ''
+        aws_secret_key_val = load_setting('aws_secret_key') or ''
+        aws_session_token_val = load_setting('aws_session_token') or ''
+        gs_access_key_val = load_setting('gs_access_key') or ''
+        gs_secret_key_val = load_setting('gs_secret_key') or ''
+        wordlist_path_val = load_setting('wordlist_path') or ''
+        checkbox_inpt_val = load_setting('passive_mode')
+        checkbox_inpt_val = bool(str(checkbox_inpt_val)) if checkbox_inpt_val else False
         if checkbox_inpt_val:
             RUN_TESTS = False
         else:
