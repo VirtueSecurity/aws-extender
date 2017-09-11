@@ -597,15 +597,11 @@ class BucketScan(object):
                     issues.append('s3:PutBucketAcl')
             else:
                 try:
-                    bucket.add_email_grant('FULL_CONTROL', '')
+                    bucket.add_email_grant('FULL_CONTROL', 0)
+                    issues.append('s3:PutBucketAcl')
                 except S3ResponseError as error:
                     if error.error_code == 'UnresolvableGrantByEmailAddress':
                         issues.append('s3:PutBucketAcl')
-                except AttributeError as error:
-                    if error.message.startswith("'Policy'"):
-                        issues.append('s3:PutBucketAcl')
-                    else:
-                        raise
 
             try:
                 self.boto3_client.put_bucket_policy(
@@ -652,9 +648,10 @@ class BucketScan(object):
                 print 'Error Code (set_contents_from_string): ' + str(error.error_code)
 
             try:
-                bucket.add_email_grant('FULL_CONTROL', '')
+                bucket.add_email_grant('FULL_CONTROL', 0)
+                issues.append('FULL_CONTROL')
             except S3ResponseError as error:
-                if error.error_code == 'MalformedACLError':
+                if error.error_code == 'UnresolvableGrantByEmailAddress':
                     issues.append('FULL_CONTROL')
                 else:
                     print 'Error Code (add_email_grant): ' + str(error.error_code)
@@ -682,10 +679,10 @@ class BucketScan(object):
 
         if not issues:
             return False
-        if ('s3:PutBucketAcl' in issues or 'FULL_CONTROL' in issues) or len(issues) > 5:
+        if ('s3:PutBucketAcl' in issues or 'FULL_CONTROL' in issues) or len(issues) > 4:
             issue_level = 'High'
-        elif ('s3:ListBucket' in issues and 's3:PutObject' in issues) or\
-            ('READ' in issues and 'WRITE' in issues) or len(issues) > 2:
+        elif len(issues) > 2 or ('READ' in issues and
+                                 'WRITE<ul><li>test.txt</li></ul>' in issues):
             issue_level = 'Medium'
         else:
             issue_level = 'Low'
@@ -705,13 +702,16 @@ class BucketScan(object):
         mark_request = False
         start = 0
 
-        if bucket_type != 'Azure':
-            now = int(time.time())
-            diff = (int(timestamp) - now) / 3600
-        else:
-            timestamp = urllib.unquote(timestamp)
-            timestamp = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S%fZ')
-            diff = int((timestamp - datetime.now()).total_seconds()) / 3600
+        try:
+            if bucket_type != 'Azure':
+                now = int(time.time())
+                diff = (int(timestamp) - now) / 3600
+            else:
+                timestamp = urllib.unquote(timestamp)
+                timestamp = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S%fZ')
+                diff = int((timestamp - datetime.now()).total_seconds()) / 3600
+        except ValueError:
+            return
 
         if diff > 24:
             start = self.helpers.indexOf(self.response,
@@ -786,13 +786,13 @@ class BucketScan(object):
                 issues.append('s3:PutObjectAcl')
         else:
             try:
-                key_obj.add_email_grant('FULL_CONTROL', '')
+                key_obj.add_email_grant('FULL_CONTROL', 0)
+                permission = 's3:PutObjectAcl' if bucket_type == 'S3' else 'FULL_CONTROL'
+                issues.append(permission)
             except S3ResponseError as error:
                 if error.error_code == 'UnresolvableGrantByEmailAddress':
-                    issues.append('s3:PutObjectAcl')
-                else:
-                    if error.error_code == 'MalformedACLError':
-                        issues.append('FULL_CONTROL')
+                    permission = 's3:PutObjectAcl' if bucket_type == 'S3' else 'FULL_CONTROL'
+                    issues.append(permission)
 
         if not issues:
             return
@@ -868,6 +868,7 @@ class BucketScan(object):
             """Assess identified buckets."""
             mark_request = False
             for i in xrange(0, len(bucket_matches)):
+                issues = []
                 offsets = []
                 bucket_match = bucket_matches[i]
                 bucket_url = bucket_match[0]
@@ -879,7 +880,7 @@ class BucketScan(object):
                     continue
                 try:
                     key = bucket_match[3]
-                    key_tuple = (key, bucket_url, host)
+                    key_tuple = (key, bucket_name, host)
                     if key and key_tuple not in IDENTIFIED_VALUES and RUN_TESTS:
                         self.test_object(bucket_name, bucket_type, key)
                     IDENTIFIED_VALUES.add(key_tuple)
@@ -904,14 +905,6 @@ class BucketScan(object):
                     markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
                 else:
                     markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
-                issue_name = '%s Bucket Detected' % bucket_type
-                issue_level = 'Information'
-                issue_detail = '''The following %s bucket has been identified:<br>
-                    <li>%s</li>''' % (bucket_type, bucket_name)
-                self.scan_issues.append(
-                    ScanIssue(self.request_response.getHttpService(),
-                              self.current_url, markers, issue_name, issue_level, issue_detail)
-                )
                 if RUN_TESTS:
                     issues = self.test_bucket(bucket_name, bucket_type)
                     if issues:
@@ -921,7 +914,15 @@ class BucketScan(object):
                                       markers, issues['issue_name'], issues['issue_level'], issues['issue_detail']
                                      )
                         )
-
+                if not issues:
+                    issue_name = '%s Bucket Detected' % bucket_type
+                    issue_level = 'Information'
+                    issue_detail = '''The following %s bucket has been identified:<br>
+                        <li>%s</li>''' % (bucket_type, bucket_name)
+                    self.scan_issues.append(
+                        ScanIssue(self.request_response.getHttpService(),
+                                  self.current_url, markers, issue_name, issue_level, issue_detail)
+                    )
         if s3_bucket_matches:
             assess_buckets(s3_bucket_matches, 'S3')
 
