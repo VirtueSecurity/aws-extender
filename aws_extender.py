@@ -328,9 +328,11 @@ class BucketScan(object):
                 if error_code == 404:
                     return False
         elif bucket_type == 'GS':
-            bucket_exists = self.boto_gs_con.lookup(bucket_name)
-            if not bucket_exists:
-                return False
+            try:
+                self.boto_gs_con.head_bucket(bucket_name)
+            except S3ResponseError as error:
+                if error.error_code == 'NoSuchBucket':
+                    return False
         elif bucket_type == 'Azure':
             try:
                 bucket_url = 'https://' + bucket_name + '?comp=list&maxresults=10'
@@ -570,7 +572,6 @@ class BucketScan(object):
 
             try:
                 self.boto3_client.put_object(
-                    ACL='public-read-write',
                     Body=b'test',
                     Bucket=bucket_name,
                     Key='test.txt'
@@ -629,10 +630,7 @@ class BucketScan(object):
             except ResponseParserError:
                 issues.append('s3:PutBucketPolicy')
         elif bucket_type == 'GS':
-            try:
-                bucket = self.boto_gs_con.get_bucket(bucket_name, validate=False)
-            except S3ResponseError as error:
-                return False
+            bucket = self.boto_gs_con.get_bucket(bucket_name, validate=False)
 
             try:
                 i = 0
@@ -654,9 +652,9 @@ class BucketScan(object):
                 print 'Error Code (set_contents_from_string): ' + str(error.error_code)
 
             try:
-                bucket.add_email_grant('FULL_CONTROL', 0)
+                bucket.add_email_grant('FULL_CONTROL', '')
             except S3ResponseError as error:
-                if error.error_code == 'UnresolvableGrantByEmailAddress':
+                if error.error_code == 'MalformedACLError':
                     issues.append('FULL_CONTROL')
                 else:
                     print 'Error Code (add_email_grant): ' + str(error.error_code)
@@ -692,12 +690,12 @@ class BucketScan(object):
         else:
             issuelevel = 'Low'
 
-        issuename = '%s Bucket Misconfiguration' % bucket_type
-        issuedetail = '''The "%s" %s bucket grants the following permissions:<br>
+        issue_name = '%s Bucket Misconfiguration' % bucket_type
+        issue_detail = '''The "%s" %s bucket grants the following permissions:<br>
                          <li>%s</li><br><br>''' % (bucket_name, bucket_type,
                                                    '</li><li>'.join(issues))
 
-        return {'issuename': issuename, 'issuedetail': issuedetail,
+        return {'issue_name': issue_name, 'issue_detail': issue_detail,
                 'issuelevel': issuelevel}
 
     def check_timestamp(self, bucket_url, bucket_type, timestamp):
@@ -729,21 +727,23 @@ class BucketScan(object):
                 markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
             else:
                 markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
-            issuename = '%s Signed URL Excessive Expiration Time' % bucket_type
+            issue_name = '%s Signed URL Excessive Expiration Time' % bucket_type
             issuelevel = 'Information'
-            issuedetail = '''The following %s signed URL was found to be valid for more than
+            issue_detail = '''The following %s signed URL was found to be valid for more than
                 24 hours (expires in %sh):<br><li>%s</li>''' % (bucket_type, diff, bucket_url)
             self.scan_issues.append(
                 ScanIssue(self.request_response.getHttpService(),
-                          self.current_url, markers, issuename, issuelevel, issuedetail)
+                          self.current_url, markers, issue_name, issuelevel, issue_detail)
             )
 
     def test_object(self, bucket_name, bucket_type, key, mark=True):
         """Test individual bucket objects."""
         issues = []
         grants = []
+        markers = []
         offsets = []
-        issuename = ''
+        issue_name = ''
+        permission = ''
         mark_request = False
         norm_key = key.replace('\\', '')
 
@@ -766,7 +766,8 @@ class BucketScan(object):
             for grant in key_acl.grants:
                 grants.append((grant.display_name or grant.uri or grant.id) + '->' +
                               grant.permission)
-            issues.append('s3:GetObjectAcl<ul><li>%s</li></ul>' % '</li><li>'.join(grants))
+            permission = 's3:GetObjectAcl' if bucket_type == 'S3' else 'getIamPolicy'
+            issues.append('%s<ul><li>%s</li></ul>' % (permission, '</li><li>'.join(grants)))
         except S3ResponseError:
             pass
 
@@ -785,22 +786,20 @@ class BucketScan(object):
                 issues.append('s3:PutObjectAcl')
         else:
             try:
-                key_obj.add_email_grant('FULL_CONTROL', 0)
+                key_obj.add_email_grant('FULL_CONTROL', '')
             except S3ResponseError as error:
                 if error.error_code == 'UnresolvableGrantByEmailAddress':
                     issues.append('s3:PutObjectAcl')
-            except AttributeError as error:
-                if error.message.startswith("'Policy'"):
-                    issues.append('s3:PutObjectAcl')
                 else:
-                    raise
+                    if error.error_code == 'MalformedACLError':
+                        issues.append('FULL_CONTROL')
 
         if not issues:
             return
         if 'READ' in issues and len(issues) < 2:
             issuelevel = 'Information'
-            issuename = '%s Object Publicly Accessible' % bucket_type
-        elif 's3:PutObjectAcl' in issues:
+            issue_name = '%s Object Publicly Accessible' % bucket_type
+        elif 's3:PutObjectAcl' in issues or 'FULL_CONTROL' in issues:
             issuelevel = 'High'
         else:
             issuelevel = 'Low'
@@ -821,17 +820,15 @@ class BucketScan(object):
             markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
         elif mark:
             markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
-        else:
-            markers = []
 
-        if not issuename:
-            issuename = '%s Object Misconfiguration' % bucket_type
-        issuedetail = '''The following ACL grants were found set on the "%s" object of
+        if not issue_name:
+            issue_name = '%s Object Misconfiguration' % bucket_type
+        issue_detail = '''The following ACL grants were found set on the "%s" object of
             the "%s" %s bucket:<br><li>%s</li>''' % (norm_key, bucket_name, bucket_type,
                                                      '</li><li>'.join(issues))
         self.scan_issues.append(
             ScanIssue(self.request_response.getHttpService(),
-                      self.current_url, markers, issuename, issuelevel, issuedetail)
+                      self.current_url, markers, issue_name, issuelevel, issue_detail)
         )
 
     def check_buckets(self):
@@ -907,13 +904,13 @@ class BucketScan(object):
                     markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
                 else:
                     markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
-                issuename = '%s Bucket Detected' % bucket_type
+                issue_name = '%s Bucket Detected' % bucket_type
                 issuelevel = 'Information'
-                issuedetail = '''The following %s bucket has been identified:<br>
+                issue_detail = '''The following %s bucket has been identified:<br>
                     <li>%s</li>''' % (bucket_type, bucket_name)
                 self.scan_issues.append(
                     ScanIssue(self.request_response.getHttpService(),
-                              self.current_url, markers, issuename, issuelevel, issuedetail)
+                              self.current_url, markers, issue_name, issuelevel, issue_detail)
                 )
                 if RUN_TESTS:
                     issues = self.test_bucket(bucket_name, bucket_type)
@@ -921,7 +918,7 @@ class BucketScan(object):
                         self.scan_issues.append(
                             ScanIssue(self.request_response.getHttpService(),
                                       self.helpers.analyzeRequest(self.request_response).getUrl(),
-                                      markers, issues['issuename'], issues['issuelevel'], issues['issuedetail']
+                                      markers, issues['issue_name'], issues['issuelevel'], issues['issue_detail']
                                      )
                         )
 
@@ -953,15 +950,15 @@ class CognitoScan(object):
             token = client.get_open_id_token(IdentityId=identity_id)['Token']
         except (ClientError, KeyError):
             return
-        issuename = 'Cognito Unauthenticated Identities Enabled'
+        issue_name = 'Cognito Unauthenticated Identities Enabled'
         issuelevel = 'Information'
-        issuedetail = '''The following identity pool allows unauthenticated identities:
+        issue_detail = '''The following identity pool allows unauthenticated identities:
             <br><ul><li>%s</li></ul><br>The following identity ID has been obtained:
             <ul><li>%s</li></ul><br>The following token has been obtained:
             <ul><li>%s</li></ul>''' % (identity_pool_id, identity_id, token)
         self.scan_issues.append(
             ScanIssue(self.request_response.getHttpService(),
-                      self.current_url, markers, issuename, issuelevel, issuedetail)
+                      self.current_url, markers, issue_name, issuelevel, issue_detail)
         )
 
     def identify_identity_pools(self):
@@ -1016,13 +1013,13 @@ class CognitoScan(object):
                     markers = [self.callbacks.applyMarkers(self.request_response, offsets, None)]
                 else:
                     markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
-                issuename = 'Cognito Identity Pool Detected'
+                issue_name = 'Cognito Identity Pool Detected'
                 issuelevel = 'Information'
-                issuedetail = '''The following identity pool ID has been identified:<br>
+                issue_detail = '''The following identity pool ID has been identified:<br>
                     <li>%s</li>''' % identity_pool_id
                 self.scan_issues.append(
                     ScanIssue(self.request_response.getHttpService(),
-                              self.current_url, markers, issuename, issuelevel, issuedetail)
+                              self.current_url, markers, issue_name, issuelevel, issue_detail)
                 )
                 IDENTIFIED_VALUES.add(identity_pool_tuple)
                 if identity_id and RUN_TESTS:
