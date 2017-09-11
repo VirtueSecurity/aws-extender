@@ -8,6 +8,7 @@ AWS Extender is a [BurpSuite](https://portswigger.net/burp/) extension to identi
 
 #### Installing Dependencies
 Both of [boto](https://github.com/boto/boto) and [boto3](https://github.com/boto/boto3) are required. You can install them using [pip](https://en.wikipedia.org/wiki/Pip_\(package_manager\)):
+
     $ pip install -r requirements.txt
 
 #### Custom Environment Settings
