@@ -6,9 +6,9 @@ AWS Extender is a [BurpSuite](https://portswigger.net/burp/) extension to identi
 ## Getting Started
 ##### For general instructions on how to load BurpSuite extensions, please visit this [URL](https://support.portswigger.net/customer/portal/articles/1965930-how-to-install-an-extension-in-burp-suite).
 
-#### Installing Dependency Libraries
-1. Download the file "[requirements.txt](/requirements.txt)".
-2. Run the following command `pip install -r requirements.txt`.
+#### Installing Dependencies
+Both of [boto](https://github.com/boto/boto) and [boto3](https://github.com/boto/boto3) are required. You can install them using [pip](https://en.wikipedia.org/wiki/Pip_\(package_manager\)):
+    $ pip install -r requirements.txt
 
 #### Custom Environment Settings
 1. Open the BurpSuite Extender tab.
