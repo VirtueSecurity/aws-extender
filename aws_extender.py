@@ -683,12 +683,12 @@ class BucketScan(object):
         if not issues:
             return False
         if ('s3:PutBucketAcl' in issues or 'FULL_CONTROL' in issues) or len(issues) > 5:
-            issuelevel = 'High'
+            issue_level = 'High'
         elif ('s3:ListBucket' in issues and 's3:PutObject' in issues) or\
             ('READ' in issues and 'WRITE' in issues) or len(issues) > 2:
-            issuelevel = 'Medium'
+            issue_level = 'Medium'
         else:
-            issuelevel = 'Low'
+            issue_level = 'Low'
 
         issue_name = '%s Bucket Misconfiguration' % bucket_type
         issue_detail = '''The "%s" %s bucket grants the following permissions:<br>
@@ -696,7 +696,7 @@ class BucketScan(object):
                                                    '</li><li>'.join(issues))
 
         return {'issue_name': issue_name, 'issue_detail': issue_detail,
-                'issuelevel': issuelevel}
+                'issue_level': issue_level}
 
     def check_timestamp(self, bucket_url, bucket_type, timestamp):
         """Check timestamps of signed URLs."""
@@ -728,12 +728,12 @@ class BucketScan(object):
             else:
                 markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
             issue_name = '%s Signed URL Excessive Expiration Time' % bucket_type
-            issuelevel = 'Information'
+            issue_level = 'Information'
             issue_detail = '''The following %s signed URL was found to be valid for more than
                 24 hours (expires in %sh):<br><li>%s</li>''' % (bucket_type, diff, bucket_url)
             self.scan_issues.append(
                 ScanIssue(self.request_response.getHttpService(),
-                          self.current_url, markers, issue_name, issuelevel, issue_detail)
+                          self.current_url, markers, issue_name, issue_level, issue_detail)
             )
 
     def test_object(self, bucket_name, bucket_type, key, mark=True):
@@ -797,12 +797,12 @@ class BucketScan(object):
         if not issues:
             return
         if 'READ' in issues and len(issues) < 2:
-            issuelevel = 'Information'
+            issue_level = 'Information'
             issue_name = '%s Object Publicly Accessible' % bucket_type
         elif 's3:PutObjectAcl' in issues or 'FULL_CONTROL' in issues:
-            issuelevel = 'High'
+            issue_level = 'High'
         else:
-            issuelevel = 'Low'
+            issue_level = 'Low'
 
         start = self.helpers.indexOf(self.response,
                                      key, True, 0, self.response_len)
@@ -828,7 +828,7 @@ class BucketScan(object):
                                                      '</li><li>'.join(issues))
         self.scan_issues.append(
             ScanIssue(self.request_response.getHttpService(),
-                      self.current_url, markers, issue_name, issuelevel, issue_detail)
+                      self.current_url, markers, issue_name, issue_level, issue_detail)
         )
 
     def check_buckets(self):
@@ -905,12 +905,12 @@ class BucketScan(object):
                 else:
                     markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
                 issue_name = '%s Bucket Detected' % bucket_type
-                issuelevel = 'Information'
+                issue_level = 'Information'
                 issue_detail = '''The following %s bucket has been identified:<br>
                     <li>%s</li>''' % (bucket_type, bucket_name)
                 self.scan_issues.append(
                     ScanIssue(self.request_response.getHttpService(),
-                              self.current_url, markers, issue_name, issuelevel, issue_detail)
+                              self.current_url, markers, issue_name, issue_level, issue_detail)
                 )
                 if RUN_TESTS:
                     issues = self.test_bucket(bucket_name, bucket_type)
@@ -918,7 +918,7 @@ class BucketScan(object):
                         self.scan_issues.append(
                             ScanIssue(self.request_response.getHttpService(),
                                       self.helpers.analyzeRequest(self.request_response).getUrl(),
-                                      markers, issues['issue_name'], issues['issuelevel'], issues['issue_detail']
+                                      markers, issues['issue_name'], issues['issue_level'], issues['issue_detail']
                                      )
                         )
 
@@ -951,14 +951,14 @@ class CognitoScan(object):
         except (ClientError, KeyError):
             return
         issue_name = 'Cognito Unauthenticated Identities Enabled'
-        issuelevel = 'Information'
+        issue_level = 'Information'
         issue_detail = '''The following identity pool allows unauthenticated identities:
             <br><ul><li>%s</li></ul><br>The following identity ID has been obtained:
             <ul><li>%s</li></ul><br>The following token has been obtained:
             <ul><li>%s</li></ul>''' % (identity_pool_id, identity_id, token)
         self.scan_issues.append(
             ScanIssue(self.request_response.getHttpService(),
-                      self.current_url, markers, issue_name, issuelevel, issue_detail)
+                      self.current_url, markers, issue_name, issue_level, issue_detail)
         )
 
     def identify_identity_pools(self):
@@ -1014,12 +1014,12 @@ class CognitoScan(object):
                 else:
                     markers = [self.callbacks.applyMarkers(self.request_response, None, offsets)]
                 issue_name = 'Cognito Identity Pool Detected'
-                issuelevel = 'Information'
+                issue_level = 'Information'
                 issue_detail = '''The following identity pool ID has been identified:<br>
                     <li>%s</li>''' % identity_pool_id
                 self.scan_issues.append(
                     ScanIssue(self.request_response.getHttpService(),
-                              self.current_url, markers, issue_name, issuelevel, issue_detail)
+                              self.current_url, markers, issue_name, issue_level, issue_detail)
                 )
                 IDENTIFIED_VALUES.add(identity_pool_tuple)
                 if identity_id and RUN_TESTS:
