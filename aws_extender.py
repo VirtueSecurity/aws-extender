@@ -383,14 +383,14 @@ class BucketScan(object):
                                   grant.permission)
                 issues.append('s3:GetBucketAcl<ul><li>%s</li></ul>' % '</li><li>'.join(grants))
             except S3ResponseError as error:
-                print 'Error Code (get_bucket_acl): ' + str(error.error_code)
+                print('Error Code (get_bucket_acl): ' + str(error.error_code))
 
             try:
                 self.boto3_client.get_bucket_cors(Bucket=bucket_name)
                 issues.append('s3:GetBucketCORS')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (get_bucket_cors): ' + str(error_code)
+                print('Error Code (get_bucket_cors): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:GetBucketCORS')
 
@@ -399,7 +399,7 @@ class BucketScan(object):
                 issues.append('s3:GetLifecycleConfiguration')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (get_bucket_lifecycle): ' + str(error_code)
+                print('Error Code (get_bucket_lifecycle): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:GetLifecycleConfiguration')
 
@@ -408,7 +408,7 @@ class BucketScan(object):
                 issues.append('s3:GetBucketNotification')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (get_bucket_notification): ' + str(error_code)
+                print('Error Code (get_bucket_notification): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:GetBucketNotification')
 
@@ -417,7 +417,7 @@ class BucketScan(object):
                 issues.append('s3:GetBucketPolicy')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (get_bucket_policy): ' + str(error_code)
+                print('Error Code (get_bucket_policy): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:GetBucketPolicy')
 
@@ -426,7 +426,7 @@ class BucketScan(object):
                 issues.append('s3:GetBucketTagging')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (get_bucket_tagging): ' + str(error_code)
+                print('Error Code (get_bucket_tagging): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:GetBucketTagging')
 
@@ -435,7 +435,7 @@ class BucketScan(object):
                 issues.append('s3:GetBucketWebsite')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (get_bucket_website): ' + str(error_code)
+                print('Error Code (get_bucket_website): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:GetBucketWebsite')
 
@@ -443,8 +443,9 @@ class BucketScan(object):
                 self.boto3_client.list_multipart_uploads(Bucket=bucket_name)
                 issues.append('s3:ListMultipartUploadParts')
             except ClientError as error:
-                error_code = error.response['Error']['Code']
-                print 'Error Code (list_multipart_uploads): ' + str(error_code)
+                error_code = error.respon
+                se['Error']['Code']
+                print('Error Code (list_multipart_uploads): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:ListMultipartUploadParts')
 
@@ -457,7 +458,7 @@ class BucketScan(object):
                         break
                 issues.append('s3:ListBucket<ul><li>%s</li></ul>' % '</li><li>'.join(keys))
             except S3ResponseError as error:
-                print 'Error Code (list): ' + str(error.error_code)
+                print('Error Code (list): ' + str(error.error_code))
                 if self.wordlist_path:
                     enumerate_keys(bucket, bucket_name, 'S3')
 
@@ -480,7 +481,7 @@ class BucketScan(object):
                 issues.append('s3:PutBucketCORS')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (put_bucket_cors): ' + str(error_code)
+                print('Error Code (put_bucket_cors): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:PutBucketCORS')
 
@@ -499,7 +500,7 @@ class BucketScan(object):
                 issues.append('s3:PutLifecycleConfiguration')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (put_bucket_lifecycle_configuration): ' + str(error_code)
+                print('Error Code (put_bucket_lifecycle_configuration): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:PutLifecycleConfiguration')
 
@@ -511,7 +512,7 @@ class BucketScan(object):
                 issues.append('s3:PutBucketLogging')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (put_bucket_logging): ' + str(error_code)
+                print('Error Code (put_bucket_logging): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:PutBucketLogging')
 
@@ -528,7 +529,7 @@ class BucketScan(object):
                 issues.append('s3:PutBucketNotification')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (put_bucket_notification): ' + str(error_code)
+                print('Error Code (put_bucket_notification): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:PutBucketNotification')
 
@@ -547,7 +548,7 @@ class BucketScan(object):
                 issues.append('s3:PutBucketTagging')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (put_bucket_tagging): ' + str(error_code)
+                print('Error Code (put_bucket_tagging): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:PutBucketTagging')
 
@@ -566,7 +567,7 @@ class BucketScan(object):
                 issues.append('s3:PutBucketWebsite')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (put_bucket_website): ' + str(error_code)
+                print('Error Code (put_bucket_website): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:PutBucketWebsite')
 
@@ -579,7 +580,7 @@ class BucketScan(object):
                 issues.append('s3:PutObject<ul><li>test.txt</li></ul>')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (put_object): ' + str(error_code)
+                print('Error Code (put_object): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:PutObject')
 
@@ -592,7 +593,7 @@ class BucketScan(object):
                     issues.append('s3:PutBucketAcl')
                 except ClientError as error:
                     error_code = error.response['Error']['Code']
-                    print 'Error Code (put_bucket_acl): ' + str(error_code)
+                    print('Error Code (put_bucket_acl): ' + str(error_code))
                 except ResponseParserError:
                     issues.append('s3:PutBucketAcl')
             else:
@@ -622,7 +623,7 @@ class BucketScan(object):
                 issues.append('s3:PutBucketPolicy')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (put_bucket_policy): ' + str(error_code)
+                print('Error Code (put_bucket_policy): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:PutBucketPolicy')
         elif bucket_type == 'GS':
@@ -637,7 +638,7 @@ class BucketScan(object):
                         break
                 issues.append('READ<ul><li>%s</li></ul>' % '</li><li>'.join(keys))
             except S3ResponseError as error:
-                print 'Error Code (list): ' + str(error.error_code)
+                print('Error Code (list): ' + str(error.error_code))
                 if self.wordlist_path:
                     enumerate_keys(bucket, bucket_name, 'GS')
             try:
@@ -645,7 +646,7 @@ class BucketScan(object):
                 key.set_contents_from_string('')
                 issues.append('WRITE<ul><li>test.txt</li></ul>')
             except S3ResponseError as error:
-                print 'Error Code (set_contents_from_string): ' + str(error.error_code)
+                print('Error Code (set_contents_from_string): ' + str(error.error_code))
 
             try:
                 bucket.add_email_grant('FULL_CONTROL', 0)
@@ -654,7 +655,7 @@ class BucketScan(object):
                 if error.error_code == 'UnresolvableGrantByEmailAddress':
                     issues.append('FULL_CONTROL')
                 else:
-                    print 'Error Code (add_email_grant): ' + str(error.error_code)
+                    print('Error Code (add_email_grant): ' + str(error.error_code))
             except AttributeError as error:
                 if error.message.startswith("'Policy'"):
                     issues.append('FULL_CONTROL')
@@ -781,7 +782,7 @@ class BucketScan(object):
                 issues.append('s3:PutObjectAcl')
             except ClientError as error:
                 error_code = error.response['Error']['Code']
-                print 'Error Code (put_object_acl): ' + str(error_code)
+                print('Error Code (put_object_acl): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:PutObjectAcl')
         else:
