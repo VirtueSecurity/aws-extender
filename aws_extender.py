@@ -443,8 +443,7 @@ class BucketScan(object):
                 self.boto3_client.list_multipart_uploads(Bucket=bucket_name)
                 issues.append('s3:ListMultipartUploadParts')
             except ClientError as error:
-                error_code = error.respon
-                se['Error']['Code']
+                error_code = error.response['Error']['Code']
                 print('Error Code (list_multipart_uploads): ' + str(error_code))
             except ResponseParserError:
                 issues.append('s3:ListMultipartUploadParts')
