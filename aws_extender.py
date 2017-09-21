@@ -385,8 +385,8 @@ class BucketScan(object):
             try:
                 bucket_acl = bucket.get_acl().acl
                 for grant in bucket_acl.grants:
-                    grants.append((grant.display_name or grant.uri or grant.id) + '->' +
-                                  grant.permission)
+                    grants.append((grant.display_name or grant.uri or grant.id or
+                                   grant.email_address) + '->' + grant.permission)
                 issues.append('s3:GetBucketAcl<ul><li>%s</li></ul>' % '</li><li>'.join(grants))
             except S3ResponseError as error:
                 print('Error Code (get_bucket_acl): ' + str(error.error_code))
@@ -770,8 +770,8 @@ class BucketScan(object):
         try:
             key_acl = key_obj.get_acl().acl
             for grant in key_acl.grants:
-                grants.append((grant.display_name or grant.uri or grant.id) + '->' +
-                              grant.permission)
+                grants.append((grant.display_name or grant.uri or grant.id or
+                               grant.email_address) + '->' + grant.permission)
             permission = 's3:GetObjectAcl' if bucket_type == 'S3' else 'getIamPolicy'
             issues.append('%s<ul><li>%s</li></ul>' % (permission, '</li><li>'.join(grants)))
         except S3ResponseError:
