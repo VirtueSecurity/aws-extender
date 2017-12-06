@@ -41,10 +41,101 @@ from java.awt import BorderLayout
 from java.awt import GridLayout
 from org.xml.sax import SAXException
 
+from mimetools import Message
+from StringIO import StringIO
+
 IDENTIFIED_VALUES = set()
 
+#class compatible enough with http_client.HTTPSConnection to use as https_connection_factory parameter in boto.s3.connection.S3Connection constructor
+#boto will instance it.
+class BurpHTTPConnection(object):
+    def __init__(self, host, port=443, strict=False, timeout=20, source_address=None):
+        self.host = host
+        self.port = port
+        self.strict = strict
+        self.timeout = timeout
+        self.source_address = source_address
+
+    def set_debuglevel(self, level):
+        pass
+        
+    def request(self, method, path, body=None, headers=None):
+        
+        if body is None and headers is None and method.upper() == "GET":
+            self.bytesRequest = BurpExtender.callbacks.getHelpers().buildHttpRequest(path)
+        
+        else:
+            headersList = []#burp want a list of string, one header each.
+            for k,v in headers.iteritems():
+                headersList.append(k+": "+v)
+            self.bytesRequest = BurpExtender.callbacks.getHelpers().buildHttpMessage(headersList, body)         
+            firstLineBytes = BurpExtender.callbacks.getHelpers().stringToBytes(method.upper()+" "+path+" HTTP/1.1\r\n")
+            hostHeaderBytes = BurpExtender.callbacks.getHelpers().stringToBytes("Host: "+self.host+"\r\n")
+            self.bytesRequest = firstLineBytes+hostHeaderBytes+self.bytesRequest
+        
+        #"self.port == 443" any better way to know if https has to be used?
+        self.bytesResponse = BurpExtender.callbacks.makeHttpRequest(self.host, self.port, self.port == 443, self.bytesRequest)
+    
+    def getresponse(self):
+        return BurpHTTPResponse(self.bytesResponse)
+    
+    def close(self):
+        self.bytesRequest = None
+        self.bytesResponse = None       
+
+#class compatible enough with http_client.HTTPResponse to return in BurpHTTPConnection.getresponses()
+class BurpHTTPResponse:
+    def __init__(self, bytes):
+        self.bytes = bytes
+        self.responseInfo = BurpExtender.callbacks.getHelpers().analyzeResponse(bytes)
+        self.bodyBytes = bytes[self.responseInfo.getBodyOffset():]
+        self.bodyPointer = 0
+        
+        self.strHeaders = ""
+        self.dictHeaders = {}
+        self.listHeaders = []
+        for h in self.responseInfo.getHeaders()[1:]:#first line is status line
+            self.strHeaders += h+"\r\n"
+            parts = h.split(":",1)
+            self.dictHeaders[parts[0]] = parts[1]
+            self.listHeaders.append((parts[0],parts[1]))
+
+        self.msg = Message(StringIO(self.strHeaders), True)#boto uses that
+        self.version = 11 #HTTP/1.1
+        self.status = self.responseInfo.getStatusCode()
+        self.reason = str(self.status)#enough for now
+        
+    #return a string here else there is a class cast exception in boto  
+    def read(self, amt=-1):
+        if amt < -1 or self.bodyPointer >= len(self.bodyBytes):
+            return ""
+        elif amt == -1:
+            self.bodyPointer = len(self.bodyBytes)
+            return BurpExtender.callbacks.getHelpers().bytesToString(self.bodyBytes)
+        else:
+            res = self.bodyBytes[self.bodyPointer:self.bodyPointer+amt]
+            self.bodyPointer += amt
+            return BurpExtender.callbacks.getHelpers().bytesToString(res)
+            
+    def getheader(self, name, default=None):
+        if name in self.dictHeaders:
+            return self.dictHeaders[name]
+        else:
+            return default
+    
+    #getheaders has to return a list of tuple https://docs.python.org/2/library/httplib.html#httpresponse-objects
+    def getheaders(self):
+        return self.listHeaders
+        
+    def fileno():#hoperfully nothing is using that
+        return 0
+    
 
 class BurpExtender(IBurpExtender, IScannerCheck, ITab):
+
+	#need that for BurpHTTPConnection and BurpHTTPResponse as we don't have control over their usage by boto
+    callbacks = None
+    
     def __init__(self):
         self.ext_name = 'AWS Extender'
         self.callbacks = None
@@ -66,6 +157,7 @@ class BurpExtender(IBurpExtender, IScannerCheck, ITab):
     def registerExtenderCallbacks(self, callbacks):
         """Register extender callbacks."""
         self.callbacks = callbacks
+        BurpExtender.callbacks = callbacks
 
         # Set the name of the extension
         self.callbacks.setExtensionName(self.ext_name)
@@ -300,6 +392,10 @@ class BucketScan(object):
         self.gs_secret_key = opts['gs_secret_key']
         self.wordlist_path = opts['wordlist_path']
         try:
+            
+            #https://github.com/boto/boto/blob/develop/boto/connection.py#L443 : A pair of an HTTP connection factory and the exceptions to catch
+            httpsConnectionfactoryParam = [BurpHTTPConnection, ()]
+            
             self.boto3_client = boto3.client('s3',
                                              aws_access_key_id=self.aws_access_key,
                                              aws_secret_access_key=self.aws_secret_key,
@@ -307,20 +403,22 @@ class BucketScan(object):
             self.boto_s3_con = S3Connection(
                 aws_access_key_id=self.aws_access_key,
                 aws_secret_access_key=self.aws_secret_key,
-                host='s3.amazonaws.com'
+                host='s3.amazonaws.com',
+                https_connection_factory=httpsConnectionfactoryParam
             )
             self.boto_gs_con = S3Connection(
                 aws_access_key_id=self.gs_access_key,
                 aws_secret_access_key=self.gs_secret_key,
-                host='storage.googleapis.com'
+                host='storage.googleapis.com',
+                https_connection_factory=httpsConnectionfactoryParam
             )
 
             if not (self.aws_access_key and self.aws_secret_key):
                 self.boto3_client.meta.events.register('choose-signer.s3.*', disable_signing)
-                self.boto_s3_con = S3Connection(anon=True)
+                self.boto_s3_con = S3Connection(anon=True, https_connection_factory=httpsConnectionfactoryParam)
 
             if not (self.gs_access_key and self.gs_secret_key):
-                self.boto_gs_con = S3Connection(anon=True, host='storage.googleapis.com')
+                self.boto_gs_con = S3Connection(anon=True, host='storage.googleapis.com', https_connection_factory=httpsConnectionfactoryParam)
         except NameError:
             pass
 
@@ -844,7 +942,7 @@ class BucketScan(object):
 
         # Matches S3 bucket names
         s3_buckets_regex = re.compile(
-            r'((?:\w+://)?(?:([\w.-]+)\.s3[\w.-]*\.amazonaws\.com|s3(?:[\w.-]*\.amazonaws\.com(?:(?::\d+)?\\?/)*|://)([\w.-]+))(?:(?::\d+)?\\?/([^\s?#]*))?(?:.*?\?.*Expires=(\d+))?)',
+            r'((?:\w+://)?(?:([\w.-]+)\.s3[\w.-]*\.amazonaws\.com|s3(?:[\w.-]*\.amazonaws\.com(?:(?::\d+)?\\?/)*|://)([\w.-]+))(?:(?::\d+)?\\?/([^\s"<?#]*))?(?:.*?\?.*Expires=(\d+))?)',
             re.I)
         s3_bucket_matches = re.findall(s3_buckets_regex, current_url_str)
         s3_bucket_matches += re.findall(s3_buckets_regex, self.request_str)
