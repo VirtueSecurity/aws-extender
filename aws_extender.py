@@ -133,6 +133,7 @@ class BurpHTTPResponse:
 
 class BurpExtender(IBurpExtender, IScannerCheck, ITab):
 
+	#need that for BurpHTTPConnection and BurpHTTPResponse as we don't have control over their usage by boto
     callbacks = None
     
     def __init__(self):
