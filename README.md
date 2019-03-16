@@ -1,5 +1,10 @@
 # AWS Extender
 
+[![Build Status](https://img.shields.io/github/forks/https://github.com/VirtueSecurity/aws-extender/.svg)](https://github.com/https://github.com/VirtueSecurity/aws-extender/)
+[![Build Status](https://img.shields.io/github/stars/https://github.com/VirtueSecurity/aws-extender/.svg)](https://github.com/https://github.com/VirtueSecurity/aws-extender/)
+[![License](https://img.shields.io/github/license/https://github.com/VirtueSecurity/aws-extender/.svg)](https://github.com/https://github.com/VirtueSecurity/aws-extender/)
+[![Rawsec's CyberSecurity Inventory](https://inventory.rawsec.ml/img/badges/Rawsec-inventoried-FF5050_flat.svg)](https://inventory.rawsec.ml/tools.html#AWS%20Extender)
+
 AWS Extender is a [BurpSuite](https://portswigger.net/burp/) extension to identify and test S3 buckets as well as Google Storage buckets and Azure Storage containers for common misconfiguration issues using the boto/boto3 SDK library.
 
 
