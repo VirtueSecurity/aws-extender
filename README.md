@@ -4,7 +4,7 @@ This Burp Suite extension can identify and test S3 buckets as well as Google Sto
 
 
 ## How to install
-You can install this extension directly from the BApp Store or manually by following these steps:
+You can install this extension directly from the BApp Store or manually by cloning this repo and following these steps:
 
 1. Open the Burp Suite Extender tab.
 2. Open the "Options" subtab.
