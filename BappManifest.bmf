@@ -1,0 +1,11 @@
+Uuid: 04adbe101f544c88b2497a9a25ffaab4
+ExtensionType: 2
+Name: Cloud Storage Tester
+RepoName: cloud-storage-tester
+ScreenVersion: 1.1
+SerialVersion: 1.1
+MinPlatformVersion: 2
+ProOnly: True
+Author: Elliott Frantz
+ShortDescription: Test Amazon S3, Google Storage and Azure Storage for common misconfiguration issues.
+EntryPoint: aws_extender.py

@@ -1,25 +1,23 @@
 # AWS Extender
 
-AWS Extender is a [BurpSuite](https://portswigger.net/burp/) extension to identify and test S3 buckets as well as Google Storage buckets and Azure Storage containers for common misconfiguration issues using the boto/boto3 SDK library.
+This Burp Suite extension can identify and test S3 buckets as well as Google Storage buckets and Azure Storage containers for common misconfiguration issues using the boto/boto3 SDK library.
 
 
-## Getting Started
-##### For general instructions on how to load BurpSuite extensions, please visit this [URL](https://support.portswigger.net/customer/portal/articles/1965930-how-to-install-an-extension-in-burp-suite).
+## How to install
+You can install this extension directly from the BApp Store or manually by following these steps:
 
-#### Installing Dependencies
-Both of [boto](https://github.com/boto/boto) and [boto3](https://github.com/boto/boto3) are required. You can install them using [pip](https://en.wikipedia.org/wiki/Pip_\(package_manager\)):
+1. Open the Burp Suite Extender tab.
+2. Open the "Options" subtab.
+3. Set the "Folder for loading modules" setting to the pathname of the "BappModules" folder.
+4. Open the "Extensions" subtab.
+5. Click "Add" and set "Extension type" to "Python".
+6. Set "Extension file (.py)" to the pathname of the "main.py" file and click Next. 
 
-    $ pip install -r requirements.txt
-
-#### Custom Environment Settings
-1. Open the BurpSuite Extender tab.
-2. Click "Options".
-3. Set the "Folder for loading modules" setting to the path of your Python installation's [site-packages directory](https://docs.python.org/2/install/#how-installation-works).
 
 #### Extension Settings
 The settings tab provides the following settings:
 
-<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/settings.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/settings_thumb.png?raw=true" alt="Settings Tab"></a>
+<a href="/screenshots/settings.png?raw=true" target="_blank"><img src="/screenshots/settings_thumb.png?raw=true" alt="Settings Tab"></a>
 
 Below is a description of each:
 
@@ -30,20 +28,18 @@ Below is a description of each:
 | AWS Session Key | A temporary session token | False |
 | GS Access Key | Your Google account access key ID | True |
 | GS Secret Key | Your Google account secret key | True |
-| Wordlist Filepath | A filepath to a list of filenames | False |
+| Wordlist Filepath | A filepath for a wordlist of filenames | False |
 | Passive Mode | Perform passive checks only | N/A |
+| SSL Verification | Enable/disable SSL verification | N/A |
 
 **Notes:**
 * AWS keys can be obtained from your [AWS Management Console](https://console.aws.amazon.com/iam/home?#/security_credential). For Google Cloud, see [the documentation](https://cloud.google.com/storage/docs/migrating#keys).
 
-* The extension will still provide minimal functionality (e.g., identifying buckets) even if none of the above requirements are satisfied.
-
+* When SSL verification is enabled, buckets with a dot in their name will not be thoroughly tested due to SSL verification errors in boto (see: [/boto/boto/issues/2836](https://github.com/boto/boto/issues/2836)). You can either disable SSL Verification to test these (not recommended) or use this command-line script to test such buckets ([/VirtueSecurity/aws-extender-cli](https://github.com/VirtueSecurity/aws-extender-cli)).
 
 ## Screenshots
-<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/S3_bucket_misconfiguration.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/S3_bucket_misconfiguration.png?raw=true" alt="S3 Bucket Misconfiguration"></a>
+<a href="/screenshots/S3_bucket_misconfiguration.png?raw=true" target="_blank"><img src="/screenshots/S3_bucket_misconfiguration.png?raw=true" alt="S3 Bucket Misconfiguration"></a>
 
-<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/excessive_signed_url.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/excessive_signed_url.png?raw=true" alt="S3 Signed URL Excessive Expiration Time"></a>
+<a href="/screenshots/excessive_signed_url.png?raw=true" target="_blank"><img src="/screenshots/excessive_signed_url.png?raw=true" alt="S3 Signed URL Excessive Expiration Time"></a>
 
-<a href="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/GS_bucket_misconfiguration.png?raw=true" target="_blank"><img src="https://github.com/VirtueSecurity/aws-extender/blob/master/screenshots/GS_bucket_misconfiguration.png?raw=true" alt="GS Bucket Misconfiguration"></a>
-
-
+<a href="/screenshots/GS_bucket_misconfiguration.png?raw=true" target="_blank"><img src="/screenshots/GS_bucket_misconfiguration.png?raw=true" alt="GS Bucket Misconfiguration"></a>
