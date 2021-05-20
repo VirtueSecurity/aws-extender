@@ -33,7 +33,7 @@ Below is a description of each:
 | SSL Verification | Enable/disable SSL verification | N/A |
 
 **Notes:**
-* AWS keys can be obtained from your [AWS Management Console](https://console.aws.amazon.com/iam/home?#/security_credential). For Google Cloud, see [the documentation](https://cloud.google.com/storage/docs/migrating#keys).
+* AWS keys can be obtained from your [AWS Management Console](https://console.aws.amazon.com/iam/home?#/security_credential). For Google Cloud, see [the documentation](https://cloud.google.com/storage/docs/migrating#keys). Note that AWS/GS keys are only required for authenticated tests; if no keys are provided, only unauthenticated tests will run.
 
 * When SSL verification is enabled, buckets with a dot in their name will not be thoroughly tested due to SSL verification errors in boto (see: [/boto/boto/issues/2836](https://github.com/boto/boto/issues/2836)). You can either disable SSL Verification to test these (not recommended) or use this command-line script to test such buckets ([/VirtueSecurity/aws-extender-cli](https://github.com/VirtueSecurity/aws-extender-cli)).
 
