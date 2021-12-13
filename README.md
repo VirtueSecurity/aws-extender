@@ -44,5 +44,5 @@ Below is a description of each:
 
 <a href="/screenshots/GS_bucket_misconfiguration.png?raw=true" target="_blank"><img src="/screenshots/GS_bucket_misconfiguration.png?raw=true" alt="GS Bucket Misconfiguration"></a>
 
-#### Disclaimer:
+## Disclaimer:
 Developers assume no liability and are not responsible for any misuse or damage caused by this tool. Usage of this tool for attacking targets without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state and federal laws.
