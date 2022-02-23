@@ -23,11 +23,11 @@ Below is a description of each:
 
 | Setting   |      Description      |      Required      |
 |----------|:-------------:|:-------------:|
-| AWS Access Key |  Your AWS account access key ID |  True |
-| AWS Secret Key |    Your AWS account secret key   |    True   |
+| AWS Access Key |  Your AWS account access key ID |  True* |
+| AWS Secret Key |    Your AWS account secret key   |    True*   |
 | AWS Session Key | A temporary session token | False |
-| GS Access Key | Your Google account access key ID | True |
-| GS Secret Key | Your Google account secret key | True |
+| GS Access Key | Your Google account access key ID | True* |
+| GS Secret Key | Your Google account secret key | True* |
 | Wordlist Filepath | A filepath for a wordlist of filenames | False |
 | Passive Mode | Perform passive checks only | N/A |
 | SSL Verification | Enable/disable SSL verification | N/A |
@@ -36,6 +36,7 @@ Below is a description of each:
 * AWS keys can be obtained from your [AWS Management Console](https://console.aws.amazon.com/iam/home?#/security_credential). For Google Cloud, see [the documentation](https://cloud.google.com/storage/docs/migrating#keys). Note that AWS/GS keys are only required for authenticated tests; if no keys are provided, only unauthenticated tests will run.
 
 * When SSL verification is enabled, buckets with a dot in their name will not be thoroughly tested due to SSL verification errors in boto (see: [/boto/boto/issues/2836](https://github.com/boto/boto/issues/2836)). You can either disable SSL Verification to test these (not recommended) or use this command-line script to test such buckets ([/VirtueSecurity/aws-extender-cli](https://github.com/VirtueSecurity/aws-extender-cli)).
+* It might be advisable to enable the "Passive Mode" option when testing on production environments in order to avoid any potentially disruptive bucket misconfiguration tests.
 
 ## Screenshots
 <a href="/screenshots/S3_bucket_misconfiguration.png?raw=true" target="_blank"><img src="/screenshots/S3_bucket_misconfiguration.png?raw=true" alt="S3 Bucket Misconfiguration"></a>
